@@ -1,0 +1,102 @@
+# ============================================================================
+# REALISTIC GRAVITATIONAL LENS DATASET CONFIGURATION
+# ============================================================================
+# This configuration creates a more challenging dataset where lens and non-lens
+# images have overlapping features, making classification realistic.
+
+# ============================================================================
+# GENERAL SETTINGS
+# ============================================================================
+General:
+  n_train: 1800                 # Training samples
+  n_test: 200                   # Test samples
+  image_size: 64                # Image dimensions (64x64)
+  seed: 42                      # Random seed for reproducibility
+  balance: 0.5                  # 50-50 class balance
+  backend: "synthetic"          # Use synthetic generation
+
+# ============================================================================
+# NOISE PARAMETERS (realistic observational noise)
+# ============================================================================
+Noise:
+  gaussian_sigma: 0.05          # Gaussian noise standard deviation (realistic level)
+  poisson_strength: 0.02        # Poisson noise strength
+  background_level: 0.01        # Background noise level
+  readout_noise: 5.0            # CCD readout noise
+
+# ============================================================================
+# LENS IMAGE PARAMETERS (galaxy + lensing arcs)
+# ============================================================================
+LensArcs:
+  # Background galaxy (every lens image has a galaxy)
+  galaxy_sigma_min: 3.0         # Galaxy size range
+  galaxy_sigma_max: 8.0
+  galaxy_brightness_min: 0.4    # Galaxy brightness (overlaps with non-lens)
+  galaxy_brightness_max: 0.8
+  galaxy_ellipticity_min: 0.0
+  galaxy_ellipticity_max: 0.5
+  
+  # Lensing arcs (subtle, realistic)
+  min_arcs: 1                   # At least one arc
+  max_arcs: 2                   # Maximum two arcs
+  min_radius: 8.0               # Arc radius range
+  max_radius: 20.0
+  arc_width_min: 0.8            # Thin arcs (realistic)
+  arc_width_max: 2.0
+  
+  # Arc brightness (subtle - key challenge!)
+  brightness_min: 0.2           # Faint arcs (realistic)
+  brightness_max: 0.6           # Not too bright
+  
+  blur_sigma: 1.2               # Realistic PSF blur
+  asymmetry: 0.15              # Arc asymmetry factor
+
+# ============================================================================
+# NON-LENS IMAGE PARAMETERS (just galaxies, similar to lens backgrounds)
+# ============================================================================
+GalaxyBlob:
+  sigma_min: 3.0                # Same size range as lens galaxies
+  sigma_max: 8.0
+  ellipticity_min: 0.0          # Same ellipticity range
+  ellipticity_max: 0.5
+  brightness_min: 0.4           # OVERLAPPING brightness with lens galaxies
+  brightness_max: 0.8
+  blur_sigma: 1.2               # Same PSF blur
+  
+  # Add multiple components (complex galaxies)
+  n_components_min: 1           # Some galaxies have multiple components
+  n_components_max: 3
+  
+  # Sersic profile parameters
+  sersic_index_min: 1.0         # Exponential profile
+  sersic_index_max: 4.0         # de Vaucouleurs profile
+
+# ============================================================================
+# OUTPUT SETTINGS
+# ============================================================================
+Output:
+  create_split_subdirs: true    # train/, test/ directories
+  create_class_subdirs: true    # lens/, nonlens/ subdirectories
+  image_format: "PNG"           # PNG format
+  image_quality: 95             # High quality
+  relative_paths: true          # Use relative paths in CSV
+  lens_prefix: "lens"           # Lens image filename prefix
+  nonlens_prefix: "nonlens"     # Non-lens image filename prefix
+  include_metadata: false       # Include metadata in output files
+
+# ============================================================================
+# VALIDATION SETTINGS
+# ============================================================================
+Validation:
+  check_image_integrity: true   # Validate generated images
+  sample_fraction: 0.1          # Check 10% of images
+  min_brightness: 0.01          # Minimum acceptable brightness
+  max_brightness: 1.0           # Maximum acceptable brightness
+
+# ============================================================================
+# DEBUG SETTINGS
+# ============================================================================
+Debug:
+  save_sample_images: true      # Save sample images for inspection
+  log_generation_stats: true    # Log detailed generation statistics
+  verbose_validation: false     # Detailed validation logging

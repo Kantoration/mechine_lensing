@@ -1,0 +1,348 @@
+# GitHub Actions CI/CD workflow for scientific Python project
+# Demonstrates best practices for scientific computing CI/CD
+
+name: Scientific Dataset Generator CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run tests weekly to catch dependency issues
+    - cron: '0 0 * * 0'
+
+jobs:
+  # ============================================================================
+  # CODE QUALITY CHECKS
+  # ============================================================================
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install quality tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort flake8 mypy
+        
+    - name: Check code formatting with Black
+      run: black --check --diff src/ tests/
+      
+    - name: Check import sorting with isort
+      run: isort --check-only --diff src/ tests/
+      
+    - name: Lint with flake8
+      run: |
+        # Stop build if there are Python syntax errors or undefined names
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Treat all other issues as warnings
+        flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+        
+    - name: Type checking with mypy
+      run: mypy src/ --ignore-missing-imports
+
+  # ============================================================================
+  # UNIT TESTS
+  # ============================================================================
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11']
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-xdist
+        pip install numpy pandas pillow scipy pyyaml
+        
+    - name: Run unit tests with coverage
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html -n auto
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # ============================================================================
+  # INTEGRATION TESTS
+  # ============================================================================
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install numpy pandas pillow scipy pyyaml
+        
+    - name: Test complete dataset generation
+      run: |
+        cd lens-demo
+        python src/make_dataset_scientific.py \
+          --config configs/comprehensive.yaml \
+          --out test_output \
+          --backend synthetic \
+          --validate \
+          --log-level INFO
+          
+    - name: Verify output structure
+      run: |
+        cd lens-demo
+        # Check required files exist
+        test -f test_output/train.csv
+        test -f test_output/test.csv
+        
+        # Check directory structure
+        test -d test_output/train/lens
+        test -d test_output/train/nonlens
+        test -d test_output/test/lens
+        test -d test_output/test/nonlens
+        
+        # Count images (should be 1800 train + 200 test = 2000 total)
+        image_count=$(find test_output -name "*.png" | wc -l)
+        echo "Generated $image_count images"
+        test $image_count -eq 2000
+        
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-output
+        path: lens-demo/test_output/
+        retention-days: 7
+
+  # ============================================================================
+  # PERFORMANCE BENCHMARKS
+  # ============================================================================
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: [test]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install numpy pandas pillow scipy pyyaml pytest-benchmark
+        
+    - name: Run performance benchmarks
+      run: |
+        # Create simple benchmark test
+        cat > benchmark_test.py << 'EOF'
+        import pytest
+        import numpy as np
+        from pathlib import Path
+        import sys
+        sys.path.append('lens-demo/src')
+        
+        from make_dataset_scientific import (
+            DatasetConfig, GeneralConfig, SyntheticImageGenerator, MetadataTracker
+        )
+        
+        def test_image_generation_speed(benchmark):
+            """Benchmark image generation speed."""
+            config = DatasetConfig(
+                general=GeneralConfig(image_size=64, seed=42)
+            )
+            rng = np.random.Generator(np.random.PCG64(42))
+            metadata_tracker = MetadataTracker()
+            generator = SyntheticImageGenerator(config, rng, metadata_tracker)
+            
+            # Benchmark lens image generation
+            result = benchmark(generator.create_lens_arc_image, "test", "train")
+            assert result[0].shape == (64, 64)
+        
+        def test_dataset_generation_speed(benchmark):
+            """Benchmark complete small dataset generation."""
+            config = DatasetConfig(
+                general=GeneralConfig(n_train=10, n_test=5, image_size=32, seed=42)
+            )
+            
+            def generate_dataset():
+                import tempfile
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    rng = np.random.Generator(np.random.PCG64(42))
+                    metadata_tracker = MetadataTracker()
+                    generator = SyntheticImageGenerator(config, rng, metadata_tracker)
+                    generator.generate_dataset(Path(tmpdir))
+                    return len(list(Path(tmpdir).rglob("*.png")))
+            
+            result = benchmark(generate_dataset)
+            assert result == 15  # 10 train + 5 test
+        EOF
+        
+        pytest benchmark_test.py --benchmark-only --benchmark-json=benchmark.json
+        
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark.json
+
+  # ============================================================================
+  # SECURITY SCANNING
+  # ============================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+        
+    - name: Check for known vulnerabilities
+      run: |
+        # Check dependencies for known vulnerabilities
+        pip freeze | safety check --stdin
+        
+    - name: Run Bandit security scan
+      run: |
+        bandit -r src/ -f json -o bandit-report.json || true
+        
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: bandit-report.json
+
+  # ============================================================================
+  # DOCUMENTATION BUILD
+  # ============================================================================
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install documentation tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+        pip install numpy pandas pillow scipy pyyaml  # For autodoc
+        
+    - name: Build documentation
+      run: |
+        # Create basic Sphinx configuration
+        mkdir -p docs
+        cd docs
+        
+        cat > conf.py << 'EOF'
+        import os
+        import sys
+        sys.path.insert(0, os.path.abspath('../lens-demo/src'))
+        
+        project = 'Scientific Dataset Generator'
+        copyright = '2024, Scientific Computing Team'
+        author = 'Scientific Computing Team'
+        
+        extensions = [
+            'sphinx.ext.autodoc',
+            'sphinx.ext.viewcode',
+            'sphinx.ext.napoleon',
+            'sphinx_autodoc_typehints',
+        ]
+        
+        html_theme = 'sphinx_rtd_theme'
+        EOF
+        
+        cat > index.rst << 'EOF'
+        Scientific Dataset Generator
+        ===========================
+        
+        .. automodule:: make_dataset_scientific
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        EOF
+        
+        sphinx-build -b html . _build/html
+        
+    - name: Upload documentation
+      uses: actions/upload-artifact@v3
+      with:
+        name: documentation
+        path: docs/_build/html/
+
+  # ============================================================================
+  # RELEASE PREPARATION
+  # ============================================================================
+  release-check:
+    name: Release Check
+    runs-on: ubuntu-latest
+    needs: [quality, test, integration, benchmark, security]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for changelog
+        
+    - name: Check if ready for release
+      run: |
+        echo "All checks passed - ready for release!"
+        
+        # Generate changelog (simplified)
+        echo "## Recent Changes" > CHANGELOG.md
+        git log --oneline -10 >> CHANGELOG.md
+        
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts
+        path: |
+          CHANGELOG.md
+          lens-demo/src/make_dataset_scientific.py
+          lens-demo/configs/comprehensive.yaml
