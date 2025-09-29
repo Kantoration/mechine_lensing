@@ -14,13 +14,11 @@ from pathlib import Path
 import argparse
 import logging
 
-# Add src to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
+
+from _common import setup_logging, get_device, setup_seed
 
 from datasets.lens_dataset import LensDataset
 from models import build_model
@@ -28,8 +26,6 @@ from calibration.temperature import TemperatureScaler, compute_calibration_metri
 from metrics.calibration import reliability_diagram
 from evaluation.evaluator import evaluate_with_calibration
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
 
 def create_dataloaders(data_root: str, batch_size: int, img_size: int, val_split: float = 0.1):
@@ -135,9 +131,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Setup
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
+    # Setup logging and device
+    setup_logging(verbosity=1, command="train-with-calibration")
+    setup_seed(42)
+    device = get_device()
     
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -204,3 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -23,20 +23,13 @@ from torch.utils.data import DataLoader, random_split
 import numpy as np
 from sklearn.metrics import roc_auc_score, accuracy_score, classification_report
 
-# Add src to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+from _common import setup_logging, get_device, setup_seed
 
 from datasets.lens_dataset import LensDataset
 from models.ensemble.enhanced_weighted import EnhancedUncertaintyEnsemble, create_three_member_ensemble
 from models.ensemble.registry import get_model_info
 from models.heads.aleatoric import AleatoricLoss, analyze_aleatoric_uncertainty
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -326,13 +319,14 @@ def main():
     
     args = parser.parse_args()
     
-    # Setup device
-    if args.device == 'auto':
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device(args.device)
+    # Setup logging, seed, and device
+    setup_logging(verbosity=1, command="train-enhanced-ensemble")
+    setup_seed(42)
     
-    logger.info(f"Using device: {device}")
+    if args.device == 'auto':
+        device = get_device()
+    else:
+        device = get_device(prefer_cuda=(args.device != 'cpu'))
     
     # Load configuration if provided
     config = {}
@@ -449,3 +443,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
