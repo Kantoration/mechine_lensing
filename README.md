@@ -3,21 +3,23 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Code Style](https://img.shields.io/badge/Code%20Style-black-black.svg)](https://github.com/psf/black)
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)]()
 
-A production-ready machine learning pipeline for detecting gravitational lenses in astronomical images using deep learning. This project implements both CNN (ResNet-18) and Vision Transformer (ViT) architectures with ensemble capabilities for robust lens classification.
+A production-ready machine learning pipeline for detecting gravitational lenses in astronomical images using deep learning. This project implements both CNN (ResNet-18/34) and Vision Transformer (ViT) architectures with ensemble capabilities for robust lens classification.
 
 ## 🌟 Key Features
 
-- **🎯 High Performance**: Achieves 93% accuracy on realistic synthetic datasets
+- **🎯 High Performance**: Achieves 93-96% accuracy on realistic synthetic datasets
 - **🏗️ Production Ready**: Comprehensive logging, error handling, and validation
 - **🔬 Scientific Rigor**: Proper experimental design with reproducible results
 - **🚀 Multi-Architecture**: Support for ResNet-18, ResNet-34, and ViT-B/16
 - **⚡ Ensemble Learning**: Advanced ensemble methods for improved accuracy
 - **☁️ Cloud Ready**: Easy deployment to Google Colab and AWS
 - **📊 Comprehensive Evaluation**: Detailed metrics and scientific reporting
+- **🛠️ Developer Friendly**: Makefile, pre-commit hooks, comprehensive testing
 
-## 📊 Results Overview (example)
+## 📊 Results Overview (Example)
 
 | Model | Accuracy | Precision | Recall | F1-Score | ROC AUC |
 |-------|----------|-----------|--------|----------|---------|
@@ -34,11 +36,8 @@ A production-ready machine learning pipeline for detecting gravitational lenses 
 # Python 3.8+ required
 python --version
 
-# Create virtual environment
-python -m venv lens_env
-source lens_env/bin/activate  # Linux/Mac
-# or
-lens_env\Scripts\activate     # Windows
+# Git for cloning
+git --version
 ```
 
 ### Installation
@@ -48,74 +47,150 @@ lens_env\Scripts\activate     # Windows
 git clone https://github.com/Kantoration/mechine_lensing.git
 cd mechine_lensing
 
-# Install dependencies
+# Setup development environment (recommended)
+make setup
+
+# OR manual setup
+python -m venv lens_env
+source lens_env/bin/activate  # Linux/Mac
+# lens_env\Scripts\activate   # Windows
 pip install -r requirements.txt
-
-# Verify installation
-python src/models.py  # Should show available architectures
 ```
 
-### Generate Dataset
+### Quick Development Workflow
 
 ```bash
-# Generate realistic synthetic dataset
-python src/make_dataset_scientific.py --config configs/realistic.yaml --out data_realistic
+# Complete development setup + quick test
+make dev
 
-# Quick test dataset
-python src/make_dataset_scientific.py --config configs/quick.yaml --out data_test
+# OR step by step:
+make dataset-quick    # Generate small test dataset
+make train-quick      # Quick training run
+make eval            # Evaluate model
 ```
 
-### Train Models
+### Production Workflow
 
 ```bash
-# Train ResNet-18 (laptop-friendly)
-python src/train.py --arch resnet18 --data-root data_realistic --epochs 10
+# Generate realistic dataset
+make dataset
 
-# Train ResNet-34 (more powerful)
-python src/train.py --arch resnet34 --data-root data_realistic --epochs 10
+# Train individual models
+make train-resnet18
+make train-vit        # Requires GPU or cloud
 
-# Train ViT (requires GPU or cloud)
-python src/train.py --arch vit_b_16 --data-root data_realistic --epochs 10 --batch-size 16
-```
+# Evaluate ensemble
+make eval-ensemble
 
-### Evaluate Models
-
-```bash
-# Individual model evaluation
-python src/eval.py --arch resnet18 --weights checkpoints/best_resnet18.pt --data-root data_realistic
-
-# Ensemble evaluation (best performance)
-python src/eval_ensemble.py \
-  --cnn-weights checkpoints/best_resnet18.pt \
-  --vit-weights checkpoints/best_vit_b_16.pt \
-  --data-root data_realistic
+# OR run complete pipeline
+make full-pipeline
 ```
 
 ## 📁 Project Structure
 
 ```
-lens-demo/
-├── 📁 src/                          # Source code
-│   ├── 🧠 models.py                 # Model architectures (ResNet, ViT)
-│   ├── 🏋️ train.py                  # Training script
-│   ├── 📊 eval.py                   # Individual model evaluation
-│   ├── 🤝 eval_ensemble.py          # Ensemble evaluation
-│   ├── 📁 dataset.py                # Data loading and preprocessing
-│   ├── 🎨 make_dataset_scientific.py # Scientific dataset generation
-│   └── ☁️ cloud_train.py            # Cloud deployment utilities
-├── 📁 configs/                      # Configuration files
-│   ├── ⚡ quick.yaml                # Quick test configuration
-│   ├── 🎯 realistic.yaml           # Realistic dataset configuration
-│   └── 📚 comprehensive.yaml       # Full-featured configuration
-├── 📁 checkpoints/                  # Trained model weights
-├── 📁 results/                      # Evaluation results and metrics
-├── 📁 docs/                         # Documentation
-│   ├── 📖 SCIENTIFIC_METHODOLOGY.md # Scientific approach explanation
-│   ├── 🔧 TECHNICAL_DETAILS.md     # Technical implementation details
-│   └── 🚀 DEPLOYMENT_GUIDE.md      # Cloud deployment guide
-├── 📋 requirements.txt              # Python dependencies
-├── 📜 README.md                     # This file
-└── 📄 LICENSE                       # MIT License
+mechine_lensing/
+├── 📁 data/                          # Data storage
+│   ├── raw/                          # Raw downloaded data
+│   ├── processed/                    # Processed datasets
+│   └── metadata/                     # Dataset metadata
+├── 📁 configs/                       # Configuration files
+│   ├── 🎯 baseline.yaml             # Standard configuration
+│   ├── 🌟 realistic.yaml            # Realistic dataset configuration
+│   ├── 🚀 enhanced_ensemble.yaml    # Advanced ensemble configuration
+│   └── 🔬 trans_enc_s.yaml          # Light Transformer configuration
+├── 📁 src/                           # Source code
+│   ├── 📁 analysis/                  # Post-hoc uncertainty analysis
+│   │   └── aleatoric.py              # Active learning & diagnostics
+│   ├── 📁 datasets/                  # Dataset implementations
+│   │   └── lens_dataset.py           # PyTorch Dataset class
+│   ├── 📁 models/                    # Model architectures
+│   │   ├── backbones/                # Feature extractors (ResNet, ViT, Transformer)
+│   │   │   ├── resnet.py             # ResNet-18/34 implementations
+│   │   │   ├── vit.py                # Vision Transformer ViT-B/16
+│   │   │   └── light_transformer.py  # Enhanced Light Transformer
+│   │   ├── heads/                    # Classification heads
+│   │   │   └── binary.py             # Binary classification head
+│   │   ├── ensemble/                 # Ensemble methods
+│   │   │   ├── registry.py           # Model registry & factory
+│   │   │   ├── weighted.py           # Uncertainty-weighted ensemble
+│   │   │   └── enhanced_weighted.py  # Advanced ensemble with trust learning
+│   │   ├── factory.py                # Legacy model factory
+│   │   └── lens_classifier.py        # Unified classifier wrapper
+│   ├── 📁 training/                  # Training utilities
+│   │   └── trainer.py                # Training implementation
+│   ├── 📁 evaluation/                # Evaluation utilities
+│   │   ├── evaluator.py              # Individual model evaluation
+│   │   └── ensemble_evaluator.py     # Ensemble evaluation
+│   └── 📁 utils/                     # Utility functions
+│       └── config.py                 # Configuration management
+├── 📁 scripts/                       # Entry point scripts
+│   ├── generate_dataset.py           # Dataset generation
+│   ├── train.py                      # Training entry point
+│   ├── eval.py                       # Evaluation entry point
+│   └── eval_ensemble.py              # Ensemble evaluation entry point
+├── 📁 experiments/                   # Experiment tracking
+├── 📁 tests/                         # Test suite
+├── 📁 docs/                          # Documentation
+│   ├── 📖 SCIENTIFIC_METHODOLOGY.md  # Scientific approach explanation
+│   ├── 🔧 TECHNICAL_DETAILS.md       # Technical implementation details
+│   └── 🚀 DEPLOYMENT_GUIDE.md        # Cloud deployment guide
+├── 📋 requirements.txt               # Production dependencies
+├── 📋 requirements-dev.txt           # Development dependencies
+├── 🔧 Makefile                       # Development commands
+├── 📄 env.example                    # Environment configuration template
+├── 📜 README.md                      # This file
+└── 📄 LICENSE                        # MIT License
+```
+
+## 🛠️ Development Commands
+
+The project includes a comprehensive Makefile for all development tasks:
+
+### Environment Setup
+```bash
+make setup          # Complete development environment setup
+make install-deps   # Install dependencies only
+make update-deps    # Update all dependencies
+```
+
+### Code Quality
+```bash
+make lint          # Run all code quality checks
+make format        # Format code with black and isort
+make check-style   # Check code style with flake8
+make check-types   # Check types with mypy
+```
+
+### Testing
+```bash
+make test          # Run all tests with coverage
+make test-fast     # Run fast tests only
+make test-integration  # Run integration tests only
+```
+
+### Data and Training
+```bash
+make dataset       # Generate realistic dataset
+make dataset-quick # Generate quick test dataset
+make train         # Train model (specify ARCH=resnet18|resnet34|vit_b_16)
+make train-all     # Train all architectures
+make eval          # Evaluate model
+make eval-ensemble # Evaluate ensemble
+```
+
+### Complete Workflows
+```bash
+make experiment    # Full experiment: dataset -> train -> eval
+make full-pipeline # Complete pipeline with all models
+make dev          # Quick development setup and test
+```
+
+### Utilities
+```bash
+make clean        # Clean cache and temporary files
+make status       # Show project status
+make help         # Show all available commands
 ```
 
 ## 🎯 Scientific Approach
@@ -158,42 +233,24 @@ This project uses **scientifically realistic synthetic datasets** that overcome 
 - **Multi-Scale Processing**: Different input sizes for different models
 - **Robust Predictions**: Improved generalization through diversity
 
-## 📈 Performance Analysis
-
-### Confusion Matrix (Ensemble)
-```
-                 Predicted
-              Non-lens  Lens
-Actual Non-lens    96     4
-           Lens     3    97
-
-Accuracy: 96.3%
-```
-
-### Scientific Metrics
-- **Sensitivity**: 97.0% (True Positive Rate)
-- **Specificity**: 96.0% (True Negative Rate)
-- **PPV**: 96.0% (Positive Predictive Value)
-- **NPV**: 97.0% (Negative Predictive Value)
-
 ## ☁️ Cloud Deployment
 
 ### Google Colab (FREE)
 ```bash
 # Generate Colab notebook
-python cloud_train.py --platform colab
+python scripts/cloud_train.py --platform colab
 
 # Package data for upload
-python cloud_train.py --platform package
+python scripts/cloud_train.py --platform package
 ```
 
 ### AWS EC2
 ```bash
 # Generate AWS setup script
-python cloud_train.py --platform aws
+python scripts/cloud_train.py --platform aws
 
 # Get cost estimates
-python cloud_train.py --platform estimate
+python scripts/cloud_train.py --platform estimate
 ```
 
 **Estimated Costs:**
@@ -203,48 +260,42 @@ python cloud_train.py --platform estimate
 
 ## 🛠️ Configuration
 
-### Dataset Configuration (realistic.yaml)
-```yaml
-General:
-  n_train: 1800
-  n_test: 200
-  image_size: 64
-  backend: "synthetic"
+### Environment Variables
 
-LensArcs:
-  galaxy_brightness_min: 0.4    # Overlapping with non-lens
-  galaxy_brightness_max: 0.8
-  brightness_min: 0.2           # Subtle arcs
-  brightness_max: 0.6
+Copy `env.example` to `.env` and customize:
 
-GalaxyBlob:
-  brightness_min: 0.4           # Same range as lens galaxies
-  brightness_max: 0.8
-  n_components_max: 3           # Complex structures
+```bash
+# Copy template
+cp env.example .env
+
+# Edit configuration
+# Key variables:
+# DATA_ROOT=data/processed
+# DEFAULT_ARCH=resnet18
+# WANDB_API_KEY=your_key_here
 ```
 
 ### Training Configuration
 ```bash
 # Laptop-friendly settings
-python src/train.py --arch resnet18 --epochs 10 --batch-size 32
+make train ARCH=resnet18 EPOCHS=10 BATCH_SIZE=32
 
 # High-performance settings (GPU)
-python src/train.py --arch vit_b_16 --epochs 20 --batch-size 64 --learning-rate 1e-4
+make train ARCH=vit_b_16 EPOCHS=20 BATCH_SIZE=64
 ```
 
 ## 📊 Evaluation & Metrics
 
 ### Comprehensive Evaluation
 ```bash
-# Detailed individual evaluation
-python src/eval.py --arch resnet18 --weights checkpoints/best_resnet18.pt \
-  --data-root data_realistic --save-predictions
+# Individual model evaluation
+make eval ARCH=resnet18
 
 # Ensemble evaluation with detailed analysis
-python src/eval_ensemble.py \
-  --cnn-weights checkpoints/best_resnet18.pt \
-  --vit-weights checkpoints/best_vit_b_16.pt \
-  --data-root data_realistic
+make eval-ensemble
+
+# Evaluate all models
+make eval-all
 ```
 
 ### Output Files
@@ -271,19 +322,16 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ### Development Setup
 ```bash
-# Clone with development dependencies
-git clone https://github.com/yourusername/gravitational-lens-classification.git
-cd gravitational-lens-classification
+# Clone and setup
+git clone https://github.com/Kantoration/mechine_lensing.git
+cd mechine_lensing
+make setup
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Run pre-commit checks
+make ci
 
 # Run tests
-python -m pytest tests/
-
-# Check code style
-python -m flake8 src/
-python -m black src/
+make test
 ```
 
 ## 📚 Documentation
@@ -291,7 +339,7 @@ python -m black src/
 - [📖 Scientific Methodology](docs/SCIENTIFIC_METHODOLOGY.md) - Detailed explanation of our approach
 - [🔧 Technical Details](docs/TECHNICAL_DETAILS.md) - Implementation specifics
 - [🚀 Deployment Guide](docs/DEPLOYMENT_GUIDE.md) - Cloud deployment instructions
-- [📋 API Reference](docs/API_REFERENCE.md) - Complete API documentation
+- [🤝 Contributing](CONTRIBUTING.md) - Contribution guidelines
 
 ## 🎓 Citation
 
@@ -328,3 +376,47 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **⭐ If this project helped your research, please give it a star!**
 
 Made with ❤️ for the astronomical machine learning community.
+
+## 🚀 Getting Started Examples
+
+### Example 1: Quick Experiment
+```bash
+# Complete quick experiment in 3 commands
+make setup           # Setup environment
+make experiment-quick # Generate data, train, evaluate
+make status          # Check results
+```
+
+### Example 2: Production Training
+```bash
+# Generate realistic dataset
+make dataset CONFIG_FILE=configs/realistic.yaml
+
+# Train ResNet-18 for production
+make train ARCH=resnet18 EPOCHS=20 BATCH_SIZE=32
+
+# Evaluate with detailed metrics
+make eval ARCH=resnet18
+```
+
+### Example 3: Ensemble Workflow
+```bash
+# Train multiple models
+make train-resnet18
+make train-vit
+
+# Evaluate ensemble
+make eval-ensemble
+
+# Check all results
+ls results/
+```
+
+### Example 4: Development Workflow
+```bash
+# Setup and run development checks
+make setup
+make lint            # Check code quality
+make test-fast       # Run fast tests
+make experiment-quick # Quick experiment
+```

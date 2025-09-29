@@ -1,0 +1,280 @@
+# Enhanced Ensemble Configuration for Gravitational Lens Classification
+# Supports ResNet, ViT, and Light Transformer with aleatoric uncertainty and learnable trust
+
+# ================================
+# Model Configuration
+# ================================
+model:
+  # Primary architecture when not using ensemble
+  backbone: 'light_transformer'
+  pretrained: true
+  dropout_p: 0.2
+  
+  # Head configuration
+  head:
+    type: 'aleatoric'  # 'binary' or 'aleatoric'
+    aleatoric_settings:
+      min_log_var: -10.0
+      max_log_var: 2.0
+      init_log_var: -2.0
+      uncertainty_weight: 1.0
+      regularization_strength: 0.01
+
+# ================================
+# Data Configuration  
+# ================================
+data:
+  # Multi-band astronomical imaging
+  bands: ['g', 'r', 'i']  # 3-band optical
+  
+  # Image size (auto-adjusted per architecture)
+  img_size: 112  # Will be overridden per member
+  
+  # Data loading
+  batch_size: 24  # Smaller batch for memory efficiency with ensemble
+  num_workers: 2
+  pin_memory: true
+  
+  # Augmentation
+  augmentation:
+    enabled: true
+    horizontal_flip: 0.5
+    rotation_degrees: 15
+    brightness: 0.15
+    contrast: 0.15
+    gaussian_noise: 0.02
+
+# ================================
+# Enhanced Ensemble Configuration
+# ================================
+ensemble:
+  # Enable enhanced ensemble
+  enabled: true
+  type: 'enhanced'  # Uses EnhancedUncertaintyEnsemble
+  
+  # Learnable trust parameters
+  learnable_trust: true
+  initial_trust: 1.0
+  trust_lr_multiplier: 0.1  # Lower LR for trust parameters
+  
+  # Ensemble members with different capabilities
+  members:
+    - name: "resnet18"
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: false  # Standard epistemic uncertainty only
+      temperature: 1.0
+      
+    - name: "vit_b16"
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: false  # Standard epistemic uncertainty
+      temperature: 1.2  # ViT often needs calibration
+      
+    - name: "light_transformer"
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: true  # Full uncertainty decomposition
+      temperature: 0.9  # Might be overconfident initially
+  
+  # Monte Carlo dropout settings
+  mc_samples: 30  # More samples for better uncertainty estimation
+  epsilon: 1e-6
+  
+  # Uncertainty analysis
+  uncertainty:
+    confidence_level: 0.95
+    analyze_contributions: true
+    save_individual_predictions: true
+
+# ================================
+# Training Configuration
+# ================================
+training:
+  epochs: 25  # More epochs for ensemble convergence
+  
+  # Different learning rates for different components
+  learning_rates:
+    backbone: 1e-4
+    head: 2e-4
+    trust_params: 1e-3  # Higher LR for trust parameter adaptation
+  
+  # Optimizer settings
+  optimizer:
+    type: 'adamw'
+    weight_decay: 1e-5
+    betas: [0.9, 0.999]
+    eps: 1e-8
+  
+  # Learning rate scheduling
+  scheduler:
+    type: 'cosine_annealing'
+    T_max: 25
+    eta_min: 1e-6
+  
+  # Loss function for aleatoric models
+  loss:
+    type: 'heteroscedastic_nll'  # For aleatoric uncertainty
+    uncertainty_weight: 1.0
+    regularization_strength: 0.01
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 8
+    monitor: 'val_ensemble_loss'
+    min_delta: 1e-4
+  
+  # Validation
+  val_split: 0.15
+
+# ================================
+# Evaluation Configuration
+# ================================
+evaluation:
+  batch_size: 32
+  
+  # Comprehensive uncertainty evaluation
+  uncertainty_evaluation:
+    enabled: true
+    mc_samples: 50  # More samples for evaluation
+    confidence_levels: [0.68, 0.95, 0.99]
+    
+  # Individual member analysis
+  member_analysis:
+    enabled: true
+    compute_agreement: true
+    uncertainty_decomposition: true
+    calibration_analysis: true
+  
+  # Metrics
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+    - brier_score  # For uncertainty calibration
+    - expected_calibration_error
+    - reliability_diagram
+  
+  # Visualization
+  plots:
+    uncertainty_histogram: true
+    member_agreement: true
+    calibration_plot: true
+    uncertainty_vs_error: true
+    ensemble_weights: true
+
+# ================================
+# Architecture-Specific Settings
+# ================================
+architecture_settings:
+  resnet18:
+    img_size: 112
+    batch_size: 32
+    
+  vit_b16:
+    img_size: 224  # ViT requires 224x224
+    batch_size: 16  # Smaller batch for memory
+    
+  light_transformer:
+    img_size: 112  # Efficient size
+    batch_size: 24
+
+# ================================
+# Uncertainty Analysis
+# ================================
+uncertainty_analysis:
+  # Epistemic vs Aleatoric decomposition
+  decomposition:
+    enabled: true
+    save_per_sample: true
+    
+  # Calibration assessment
+  calibration:
+    enabled: true
+    n_bins: 15
+    methods: ['ece', 'mce', 'reliability_diagram']
+    
+  # Out-of-distribution detection
+  ood_detection:
+    enabled: false  # Can be enabled with OOD data
+    threshold_percentile: 95
+    
+  # Trust parameter evolution
+  trust_evolution:
+    track: true
+    save_history: true
+    plot_evolution: true
+
+# ================================
+# Logging and Monitoring
+# ================================
+logging:
+  level: 'INFO'
+  
+  # Enhanced logging for ensemble
+  ensemble_logging:
+    log_individual_losses: true
+    log_trust_parameters: true
+    log_member_weights: true
+    log_uncertainty_stats: true
+  
+  # Experiment tracking
+  wandb:
+    enabled: false
+    project: 'gravitational-lens-enhanced-ensemble'
+    tags: ['ensemble', 'uncertainty', 'aleatoric', 'light_transformer']
+  
+  # Checkpointing
+  checkpointing:
+    save_best: true
+    save_individual_members: true
+    save_trust_parameters: true
+    monitor: 'val_ensemble_auc'
+    mode: 'max'
+
+# ================================
+# Hardware Configuration
+# ================================
+hardware:
+  device: 'auto'
+  mixed_precision: false  # Can cause issues with uncertainty estimation
+  grad_clip_norm: 1.0
+  
+  # Memory optimization for ensemble
+  memory:
+    efficient_dataloading: true
+    gradient_checkpointing: true  # For memory-intensive ensemble
+    empty_cache_frequency: 10  # Clear cache every 10 batches
+
+# ================================
+# Output Configuration
+# ================================
+output:
+  base_dir: 'experiments/enhanced_ensemble'
+  experiment_name: null  # Auto-generated
+  
+  save:
+    ensemble_predictions: true
+    individual_predictions: true
+    uncertainty_estimates: true
+    trust_parameters: true
+    member_weights: true
+    calibration_results: true
+  
+  export:
+    ensemble_onnx: false
+    individual_onnx: false
+
+# ================================
+# Reproducibility
+# ================================
+reproducibility:
+  seed: 42
+  deterministic: false  # MC dropout needs some randomness
+  benchmark: true

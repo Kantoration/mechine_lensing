@@ -39,7 +39,7 @@ from sklearn.metrics import (
     roc_auc_score, confusion_matrix, classification_report
 )
 
-from dataset import LensDataset
+from datasets.lens_dataset import LensDataset
 from models import build_model, list_available_architectures, get_model_info
 
 # Setup logging

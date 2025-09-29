@@ -1,0 +1,360 @@
+# Enhanced Light Transformer (trans_enc_s) Configuration
+# Production-ready CNN+Transformer hybrid with advanced regularization
+
+# ================================
+# Model Configuration
+# ================================
+model:
+  # Architecture: Enhanced Light Transformer
+  backbone: trans_enc_s
+  pretrained: true
+  
+  # Enhanced transformer parameters
+  params:
+    cnn_stage: layer3      # CNN feature extraction stage (layer2/layer3)
+    patch_size: 2          # Patch size for tokenization (1/2/4)
+    embed_dim: 256         # Transformer embedding dimension
+    num_heads: 4           # Number of attention heads
+    num_layers: 4          # Number of transformer layers
+    mlp_ratio: 2.0         # MLP hidden dimension ratio
+    attn_drop: 0.0         # Attention dropout probability
+    proj_drop: 0.1         # Projection dropout probability
+    pos_drop: 0.1          # Positional embedding dropout
+    drop_path_max: 0.1     # Maximum DropPath probability (linearly scheduled)
+    pooling: avg           # Pooling strategy (avg/attn/cls)
+    freeze_until: layer2   # CNN layers to freeze (none/layer2/layer3)
+  
+  # Classification head
+  head:
+    type: binary           # binary or aleatoric
+    dropout_p: 0.2
+
+# ================================
+# Data Configuration  
+# ================================
+data:
+  # Multi-band astronomical imaging
+  bands: [g, r, i]       # 3-band optical (SDSS-like)
+  img_size: 112          # Optimal size for trans_enc_s
+  
+  # Data loading
+  batch_size: 128        # Large batch size for efficiency
+  num_workers: 4
+  pin_memory: true
+  
+  # Data augmentation
+  augmentation:
+    enabled: true
+    horizontal_flip: 0.5
+    rotation_degrees: 15
+    brightness: 0.1
+    contrast: 0.1
+    gaussian_noise: 0.01
+    cutout_prob: 0.2     # Cutout augmentation
+    cutout_ratio: 0.1
+
+# ================================
+# Training Configuration
+# ================================
+training:
+  epochs: 20
+  
+  # Optimized learning rates for transformer
+  learning_rate: 2e-4    # Higher LR for transformer components
+  weight_decay: 1e-4     # L2 regularization
+  
+  # Optimizer settings
+  optimizer:
+    type: adamw
+    betas: [0.9, 0.999]
+    eps: 1e-8
+  
+  # Learning rate scheduling
+  scheduler:
+    type: cosine_annealing_warm_restarts
+    T_0: 5                # Initial restart period
+    T_mult: 2             # Period multiplier
+    eta_min: 1e-6         # Minimum learning rate
+    
+  # Warm-up schedule
+  warmup:
+    enabled: true
+    epochs: 2
+    start_lr: 1e-5
+  
+  # Loss function
+  loss: 
+    type: bce_with_logits
+    label_smoothing: 0.1  # Label smoothing for regularization
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 6
+    monitor: val_auc
+    min_delta: 1e-4
+  
+  # Validation
+  val_split: 0.15
+  
+  # Gradient clipping
+  grad_clip_norm: 1.0
+
+# ================================
+# Enhanced Ensemble Configuration
+# ================================
+ensemble:
+  enabled: true
+  type: enhanced         # Use EnhancedUncertaintyEnsemble
+  
+  # Learnable trust parameters
+  learnable_trust: true
+  trust_lr_multiplier: 0.2
+  
+  # Three-member ensemble with different strengths
+  members:
+    - name: resnet18
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: false
+      temperature: 1.0
+      
+    - name: trans_enc_s
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: false  # Use epistemic uncertainty only
+      temperature: 0.9      # Transformer might be slightly overconfident
+      params:               # Override default parameters
+        freeze_until: layer2
+        drop_path_max: 0.15  # Higher regularization in ensemble
+        pooling: avg
+        
+    - name: vit_b16
+      bands: 3
+      pretrained: true
+      dropout_p: 0.2
+      use_aleatoric: false
+      temperature: 1.2      # ViT often needs calibration
+  
+  # Monte Carlo dropout settings
+  mc_samples: 20
+  epsilon: 1e-6
+  
+  # Uncertainty analysis
+  uncertainty:
+    confidence_level: 0.95
+    analyze_contributions: true
+    save_individual_predictions: true
+
+# ================================
+# Evaluation Configuration
+# ================================
+evaluation:
+  batch_size: 256        # Large batch for efficient evaluation
+  
+  # Comprehensive uncertainty evaluation
+  uncertainty_evaluation:
+    enabled: true
+    mc_samples: 50       # More samples for evaluation
+    confidence_levels: [0.68, 0.95, 0.99]
+    
+  # Performance metrics
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+    - average_precision
+    - brier_score        # Uncertainty calibration
+    - expected_calibration_error
+  
+  # Visualization
+  plots:
+    confusion_matrix: true
+    roc_curve: true
+    precision_recall_curve: true
+    uncertainty_histogram: true
+    calibration_plot: true
+
+# ================================
+# Architecture-Specific Settings
+# ================================
+architecture_settings:
+  trans_enc_s:
+    # Recommended configurations for different use cases
+    fast_config:
+      cnn_stage: layer2
+      patch_size: 2
+      embed_dim: 128
+      num_layers: 3
+      drop_path_max: 0.05
+      
+    balanced_config:
+      cnn_stage: layer3
+      patch_size: 2
+      embed_dim: 256
+      num_layers: 4
+      drop_path_max: 0.1
+      
+    quality_config:
+      cnn_stage: layer3
+      patch_size: 1
+      embed_dim: 384
+      num_layers: 6
+      drop_path_max: 0.2
+
+# ================================
+# Calibration Configuration
+# ================================
+calibration:
+  # Temperature scaling
+  temperature_scaling: true
+  
+  # Post-hoc calibration methods
+  post_hoc:
+    enabled: true
+    methods: [temperature_scaling, platt_scaling]
+    validation_split: 0.2
+  
+  # Calibration evaluation
+  evaluation:
+    reliability_diagram: true
+    expected_calibration_error: true
+    maximum_calibration_error: true
+    brier_score_decomposition: true
+
+# ================================
+# Logging and Monitoring
+# ================================
+logging:
+  level: INFO
+  
+  # Enhanced logging for transformer
+  transformer_logging:
+    log_attention_weights: false  # Can be memory intensive
+    log_token_statistics: true
+    log_pooling_stats: true
+    log_regularization_stats: true
+  
+  # Experiment tracking
+  wandb:
+    enabled: false
+    project: gravitational-lens-trans-enc-s
+    tags: [transformer, enhanced, production]
+  
+  # TensorBoard logging
+  tensorboard:
+    enabled: true
+    log_dir: runs/trans_enc_s
+    log_histograms: true
+    log_embeddings: false  # Can be large
+  
+  # Checkpointing
+  checkpointing:
+    save_best: true
+    save_last: true
+    save_intermediate: false  # Save every N epochs
+    monitor: val_auc
+    mode: max
+
+# ================================
+# Hardware Configuration
+# ================================
+hardware:
+  device: auto           # auto/cpu/cuda/mps
+  
+  # Mixed precision training
+  mixed_precision: true  # Transformer benefits from mixed precision
+  
+  # Memory optimization
+  memory:
+    efficient_dataloading: true
+    gradient_checkpointing: false  # Usually not needed for trans_enc_s
+    empty_cache_frequency: 20      # Clear cache every N batches
+  
+  # Gradient settings
+  grad_clip_norm: 1.0
+  grad_clip_value: null  # Use norm clipping instead
+
+# ================================
+# Reproducibility
+# ================================
+reproducibility:
+  seed: 42
+  deterministic: false   # Transformer training benefits from some randomness
+  benchmark: true        # Optimize for consistent input sizes
+
+# ================================
+# Output Configuration
+# ================================
+output:
+  base_dir: experiments/trans_enc_s
+  experiment_name: null  # Auto-generated timestamp
+  
+  # What to save
+  save:
+    model_checkpoints: true
+    predictions: true
+    attention_maps: false      # Can be large
+    feature_embeddings: false  # Can be large
+    metrics: true
+    config: true
+    logs: true
+  
+  # Model export
+  export:
+    onnx: false           # Can be tricky with dynamic pos embeddings
+    torchscript: false
+    checkpoint_format: pytorch
+
+# ================================
+# Multi-Configuration Profiles
+# ================================
+profiles:
+  # Fast training profile
+  fast:
+    model.params.num_layers: 3
+    model.params.embed_dim: 128
+    model.params.drop_path_max: 0.05
+    data.batch_size: 256
+    training.epochs: 10
+    
+  # Memory-efficient profile  
+  memory_efficient:
+    data.batch_size: 64
+    hardware.gradient_checkpointing: true
+    model.params.embed_dim: 192
+    ensemble.mc_samples: 10
+    
+  # High-quality profile
+  high_quality:
+    model.params.num_layers: 6
+    model.params.embed_dim: 384
+    model.params.patch_size: 1
+    training.epochs: 30
+    ensemble.mc_samples: 50
+    data.batch_size: 64
+
+# ================================
+# Hyperparameter Search Space
+# ================================
+hyperparameter_search:
+  # Parameters to tune
+  search_space:
+    model.params.embed_dim: [128, 256, 384]
+    model.params.num_layers: [3, 4, 6]
+    model.params.drop_path_max: [0.05, 0.1, 0.2]
+    training.learning_rate: [1e-4, 2e-4, 5e-4]
+    model.params.pooling: [avg, attn, cls]
+    
+  # Search strategy
+  strategy: random       # random/grid/bayesian
+  n_trials: 20
+  
+  # Optimization objective
+  objective:
+    metric: val_auc
+    direction: maximize

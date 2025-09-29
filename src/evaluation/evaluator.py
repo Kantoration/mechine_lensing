@@ -45,7 +45,7 @@ from sklearn.metrics import (
     confusion_matrix, classification_report
 )
 
-from dataset import LensDataset
+from datasets.lens_dataset import LensDataset
 from models import build_model, list_available_architectures
 
 # Setup logging
@@ -419,6 +419,94 @@ def main():
     except Exception as e:
         logger.error(f"Evaluation failed: {e}")
         raise
+
+
+def evaluate_with_aleatoric_analysis(
+    model: nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    temperature: float = 1.0,
+    save_indicators: bool = False,
+    output_path: Optional[Path] = None
+) -> Dict[str, any]:
+    """
+    Evaluate model with comprehensive aleatoric uncertainty analysis.
+    
+    This function provides a thin wrapper around the aleatoric analysis module
+    for integration with the evaluation pipeline. Returns results suitable for
+    pandas DataFrame creation.
+    
+    Args:
+        model: Trained model to evaluate
+        dataloader: DataLoader for evaluation data
+        device: Device to run evaluation on
+        temperature: Temperature scaling parameter
+        save_indicators: Whether to save detailed indicators
+        output_path: Path to save indicators (if save_indicators=True)
+        
+    Returns:
+        Dictionary with numpy arrays suitable for DataFrame creation
+    """
+    try:
+        from analysis.aleatoric import (
+            compute_indicators_with_targets,
+            indicators_to_dataframe_dict,
+            selection_scores
+        )
+    except ImportError:
+        logger.warning("Aleatoric analysis module not available")
+        return {}
+    
+    model.eval()
+    
+    all_logits = []
+    all_targets = []
+    all_sample_ids = []
+    
+    with torch.no_grad():
+        for batch_idx, (images, targets) in enumerate(dataloader):
+            images = images.to(device)
+            targets = targets.to(device)
+            
+            # Get model predictions
+            logits = model(images)
+            
+            all_logits.append(logits.cpu())
+            all_targets.append(targets.cpu())
+            
+            # Create sample IDs
+            batch_size = images.shape[0]
+            batch_ids = [f"sample_{batch_idx}_{i}" for i in range(batch_size)]
+            all_sample_ids.extend(batch_ids)
+    
+    # Concatenate all results
+    logits_tensor = torch.cat(all_logits, dim=0)
+    targets_tensor = torch.cat(all_targets, dim=0)
+    
+    # Compute aleatoric indicators
+    indicators = compute_indicators_with_targets(
+        logits_tensor, targets_tensor, temperature=temperature
+    )
+    
+    # Convert to DataFrame-friendly format
+    df_dict = indicators_to_dataframe_dict(indicators, all_sample_ids)
+    
+    # Add selection scores for different strategies
+    try:
+        for strategy in ["entropy", "low_margin", "high_brier", "nll", "hybrid"]:
+            scores = selection_scores(indicators, strategy=strategy)
+            df_dict[f'selection_score_{strategy}'] = scores.numpy()
+    except Exception as e:
+        logger.warning(f"Could not compute selection scores: {e}")
+    
+    # Save if requested
+    if save_indicators and output_path:
+        import pandas as pd
+        df = pd.DataFrame(df_dict)
+        df.to_csv(output_path, index=False)
+        logger.info(f"Aleatoric indicators saved to: {output_path}")
+    
+    return df_dict
 
 
 if __name__ == "__main__":

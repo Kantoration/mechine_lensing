@@ -1,0 +1,281 @@
+# Baseline Configuration for Gravitational Lens Classification
+# Supports both ResNet and ViT architectures with multi-band imaging
+
+# ================================
+# Model Configuration
+# ================================
+model:
+  # Architecture: 'resnet18', 'resnet34', 'vit_b16'
+  backbone: 'resnet18'
+  
+  # Whether to use pretrained weights
+  pretrained: true
+  
+  # Dropout probability for classification head
+  dropout_p: 0.2
+  
+  # Temperature scaling for calibration (optional)
+  temperature: 1.0
+
+# ================================
+# Data Configuration  
+# ================================
+data:
+  # Input image bands/channels - supports multi-band astronomy
+  # Common configurations:
+  #   [g, r, i] - 3-band optical (SDSS-like)
+  #   [g, r, i, z, y] - 5-band optical (LSST-like) 
+  #   [r, g, b] - Standard RGB
+  bands: ['g', 'r', 'i']  # 3 channels
+  
+  # Image size - automatically adjusted based on architecture
+  # ResNet: typically 64x64 or 112x112
+  # ViT: requires 224x224 for optimal performance
+  img_size: 112
+  
+  # Data augmentation
+  augmentation:
+    enabled: true
+    horizontal_flip: 0.5
+    rotation_degrees: 10
+    brightness: 0.1
+    contrast: 0.1
+    
+  # Data loading
+  batch_size: 32
+  num_workers: 2
+  pin_memory: true
+  
+  # Class balance
+  balance: 0.5  # 50% lens, 50% non-lens
+
+# ================================
+# Training Configuration
+# ================================
+training:
+  # Training parameters
+  epochs: 20
+  learning_rate: 1e-4
+  weight_decay: 1e-5
+  
+  # Learning rate scheduling
+  scheduler:
+    type: 'reduce_on_plateau'
+    patience: 3
+    factor: 0.5
+    min_lr: 1e-6
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 5
+    min_delta: 1e-4
+  
+  # Validation split
+  val_split: 0.1
+  
+  # Loss function
+  loss: 'bce_with_logits'  # Binary cross-entropy with logits
+  
+  # Metrics to track
+  metrics: ['accuracy', 'precision', 'recall', 'f1', 'roc_auc']
+
+# ================================
+# Ensemble Configuration
+# ================================
+ensemble:
+  # Whether to use ensemble methods
+  enabled: false
+  
+  # Ensemble type: 'simple', 'uncertainty_weighted'
+  type: 'uncertainty_weighted'
+  
+  # Member architectures for ensemble
+  members: ['resnet18', 'vit_b16']
+  
+  # Monte Carlo dropout settings
+  mc_samples: 20
+  
+  # Per-member temperature scaling
+  temperatures:
+    resnet18: 1.0
+    vit_b16: 1.0
+  
+  # Uncertainty estimation
+  uncertainty:
+    confidence_level: 0.95
+    enable_analysis: true
+
+# ================================
+# Evaluation Configuration
+# ================================
+evaluation:
+  # Test batch size (can be larger than training)
+  batch_size: 64
+  
+  # Whether to save predictions
+  save_predictions: true
+  
+  # Uncertainty estimation during evaluation
+  mc_evaluation:
+    enabled: false
+    samples: 50
+  
+  # Metrics computation
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+    - sensitivity  # True positive rate
+    - specificity  # True negative rate
+  
+  # Visualization
+  plots:
+    confusion_matrix: true
+    roc_curve: true
+    uncertainty_histogram: true
+
+# ================================
+# Logging and Checkpointing
+# ================================
+logging:
+  # Logging level
+  level: 'INFO'
+  
+  # Experiment tracking
+  wandb:
+    enabled: false
+    project: 'gravitational-lens-classification'
+    entity: null  # Set to your W&B username/team
+  
+  # TensorBoard logging
+  tensorboard:
+    enabled: true
+    log_dir: 'runs'
+  
+  # Checkpoint saving
+  checkpointing:
+    save_best: true
+    save_last: true
+    monitor: 'val_loss'
+    mode: 'min'
+
+# ================================
+# Hardware Configuration
+# ================================
+hardware:
+  # Device selection
+  device: 'auto'  # 'auto', 'cpu', 'cuda', 'mps'
+  
+  # Mixed precision training (for GPU)
+  mixed_precision: false
+  
+  # Gradient clipping
+  grad_clip_norm: 1.0
+  
+  # Memory optimization
+  memory:
+    efficient_dataloading: true
+    gradient_checkpointing: false
+
+# ================================
+# Reproducibility
+# ================================
+reproducibility:
+  # Random seed for reproducibility
+  seed: 42
+  
+  # Deterministic operations (may reduce performance)
+  deterministic: false
+  
+  # Benchmark mode (for consistent input sizes)
+  benchmark: true
+
+# ================================
+# Output Configuration  
+# ================================
+output:
+  # Base directory for outputs
+  base_dir: 'experiments'
+  
+  # Experiment name (auto-generated if null)
+  experiment_name: null
+  
+  # What to save
+  save:
+    model_checkpoints: true
+    predictions: true
+    metrics: true
+    config: true
+    logs: true
+  
+  # Model export
+  export:
+    onnx: false
+    torchscript: false
+
+# ================================
+# Architecture-Specific Overrides
+# ================================
+
+# ResNet-specific settings
+resnet:
+  # Recommended image size for ResNet
+  img_size: 112
+  batch_size: 32
+  
+# ViT-specific settings  
+vit:
+  # ViT requires larger images
+  img_size: 224
+  # ViT may need smaller batch size due to memory requirements
+  batch_size: 16
+  # ViT often benefits from different learning rates
+  learning_rate: 5e-5
+
+# ================================
+# Multi-band Configurations
+# ================================
+
+# 3-band optical (SDSS-like)
+bands_3_optical:
+  bands: ['g', 'r', 'i']
+  description: "3-band optical imaging (g, r, i filters)"
+
+# 5-band optical (LSST-like)
+bands_5_optical:
+  bands: ['g', 'r', 'i', 'z', 'y']  
+  description: "5-band optical imaging (g, r, i, z, y filters)"
+
+# Standard RGB
+bands_rgb:
+  bands: ['r', 'g', 'b']
+  description: "Standard RGB imaging"
+
+# Single-band (grayscale)
+bands_single:
+  bands: ['r']
+  description: "Single-band imaging"
+
+# ================================
+# Validation and Testing
+# ================================
+validation:
+  # Cross-validation settings
+  cross_validation:
+    enabled: false
+    n_folds: 5
+    stratified: true
+  
+  # Bootstrap evaluation
+  bootstrap:
+    enabled: false
+    n_samples: 1000
+    confidence_level: 0.95
+  
+  # Statistical significance testing
+  significance_tests:
+    enabled: false
+    methods: ['mcnemar', 'paired_t_test']

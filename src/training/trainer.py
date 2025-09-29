@@ -32,8 +32,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from dataset import create_dataloaders, LensDataset
+from datasets.lens_dataset import LensDataset
 from models import build_model, list_available_architectures
+from models.ensemble.registry import make_model as make_ensemble_model, get_model_info
+from torch.utils.data import DataLoader, random_split
 
 # Setup logging
 logging.basicConfig(
@@ -50,6 +52,51 @@ def set_seed(seed: int = 42) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     logger.info(f"Set random seed to {seed}")
+
+
+def create_dataloaders(data_root: str, batch_size: int, img_size: int, 
+                      num_workers: int = 2, val_split: float = 0.1):
+    """Create train, validation, and test data loaders."""
+    logger.info(f"Creating dataloaders: batch_size={batch_size}, img_size={img_size}")
+    
+    # Create datasets
+    train_dataset = LensDataset(
+        data_root=data_root, split="train", img_size=img_size, 
+        augment=True, validate_paths=True
+    )
+    
+    test_dataset = LensDataset(
+        data_root=data_root, split="test", img_size=img_size, 
+        augment=False, validate_paths=True
+    )
+    
+    # Split training set for validation
+    train_size = int((1 - val_split) * len(train_dataset))
+    val_size = len(train_dataset) - train_size
+    train_subset, val_subset = random_split(
+        train_dataset, [train_size, val_size],
+        generator=torch.Generator().manual_seed(42)
+    )
+    
+    # Create data loaders
+    train_loader = DataLoader(
+        train_subset, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available()
+    )
+    
+    val_loader = DataLoader(
+        val_subset, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available()
+    )
+    
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available()
+    )
+    
+    logger.info(f"Dataset splits: train={len(train_subset)}, val={len(val_subset)}, test={len(test_dataset)}")
+    
+    return train_loader, val_loader, test_loader
 
 
 # LensClassifier moved to models.py for better organization
@@ -71,8 +118,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         logits = model(images).squeeze(1)
         loss = criterion(logits, labels)
         
-            loss.backward()
-            optimizer.step()
+        loss.backward()
+        optimizer.step()
 
         # Calculate accuracy
         with torch.no_grad():
@@ -90,12 +137,12 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
 
 def validate(model, val_loader, criterion, device):
     """Validate the model."""
-        model.eval()
+    model.eval()
     running_loss = 0.0
     running_acc = 0.0
     num_samples = 0
     
-        with torch.no_grad():
+    with torch.no_grad():
         for images, labels in val_loader:
             images = images.to(device)
             labels = labels.float().to(device)
@@ -132,8 +179,18 @@ def main():
                         help="Validation split fraction")
     
     # Model arguments
+    # Get available architectures from both factories
+    available_archs = list_available_architectures()
+    try:
+        from models.ensemble.registry import list_available_models
+        available_archs.extend(list_available_models())
+        # Remove duplicates while preserving order
+        available_archs = list(dict.fromkeys(available_archs))
+    except ImportError:
+        pass
+    
     parser.add_argument("--arch", type=str, default="resnet18",
-                        choices=list_available_architectures(),
+                        choices=available_archs,
                         help="Model architecture")
     parser.add_argument("--pretrained", action="store_true", default=True,
                         help="Use pretrained weights")
@@ -173,11 +230,25 @@ def main():
     try:
         # Create model first to get recommended image size
         logger.info("Creating model...")
-        model = build_model(
-            arch=args.arch,
-            pretrained=args.pretrained,
-            dropout_rate=args.dropout_rate
-        )
+        
+        # Check if using enhanced ensemble architecture
+        if args.arch in ['trans_enc_s', 'light_transformer']:
+            # Use ensemble registry for advanced models
+            backbone, head, feature_dim = make_ensemble_model(
+                name=args.arch,
+                bands=3,  # Default to RGB, could be made configurable
+                pretrained=args.pretrained,
+                dropout_p=args.dropout_rate
+            )
+            model = nn.Sequential(backbone, head)
+        else:
+            # Use legacy factory for standard models
+            model = build_model(
+                arch=args.arch,
+                pretrained=args.pretrained,
+                dropout_rate=args.dropout_rate
+            )
+        
         model = model.to(device)
         
         # Auto-detect image size if not specified
