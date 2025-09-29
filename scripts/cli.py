@@ -181,8 +181,8 @@ def add_benchmark_args(parser: argparse.ArgumentParser) -> None:
     # Output options
     parser.add_argument("--output-dir", type=str, default="benchmarks",
                         help="Output directory for results")
-    parser.add_argument("--save-visualizations", action="store_true",
-                        help="Save attention visualizations")
+    parser.add_argument("--save-visualizations", type=str, metavar="OUT_DIR", nargs='?', const="attention_viz",
+                        help="Save attention visualizations to OUT_DIR (default: attention_viz)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Parse arguments, print config, and exit without benchmarking")
 
@@ -321,7 +321,7 @@ def run_benchmark(args: argparse.Namespace) -> int:
         if args.benchmark_baselines:
             sys.argv.append('--benchmark-baselines')
         if args.save_visualizations:
-            sys.argv.append('--save-visualizations')
+            sys.argv.extend(['--save-visualizations', args.save_visualizations])
         if args.verbosity >= 2:
             sys.argv.append('--verbose')
         
