@@ -134,60 +134,69 @@ class UncertaintyWeightedEnsemble(nn.Module):
             if name not in inputs:
                 raise ValueError(f"Missing input for member '{name}'")
             
-            # Enable dropout for uncertainty estimation
-            member.train()
+            # Store original training state
+            original_training_state = member.training
             
-            # Collect MC samples
-            mc_predictions = []
-            with torch.no_grad():
-                for _ in range(mc_samples):
-                    logits = member(inputs[name])
-                    
-                    # Apply temperature scaling
-                    temperature = self.temperatures.get(name, 1.0)
-                    if temperature != 1.0:
-                        logits = logits / temperature
-                    
-                    # Convert to probabilities
-                    probs = torch.sigmoid(logits)
-                    mc_predictions.append(probs)
-            
-            # Stack MC samples: [mc_samples, batch_size]
-            mc_tensor = torch.stack(mc_predictions, dim=0)
-            
-            # Compute mean and variance
-            mean_pred = mc_tensor.mean(dim=0)  # [batch_size]
-            var_pred = mc_tensor.var(dim=0, unbiased=False)  # [batch_size]
-            
-            member_means.append(mean_pred)
-            member_vars.append(var_pred)
+            try:
+                # Enable dropout for uncertainty estimation
+                member.train()
+                
+                # Collect MC samples (KEEP IN LOGIT SPACE)
+                mc_logits = []
+                with torch.no_grad():
+                    for _ in range(mc_samples):
+                        logits = member(inputs[name])
+                        
+                        # Apply temperature scaling
+                        temperature = self.temperatures.get(name, 1.0)
+                        if temperature != 1.0:
+                            logits = logits / temperature
+                        
+                        # Keep logits for proper ensemble fusion
+                        mc_logits.append(logits)
+                
+                # Stack MC samples: [mc_samples, batch_size]
+                mc_logits_tensor = torch.stack(mc_logits, dim=0)
+                
+                # Compute mean and variance IN LOGIT SPACE
+                mean_logits = mc_logits_tensor.mean(dim=0)  # [batch_size]
+                var_logits = mc_logits_tensor.var(dim=0, unbiased=False)  # [batch_size]
+                
+                member_means.append(mean_logits)
+                member_vars.append(var_logits)
+                
+            finally:
+                # Always restore original training state to prevent memory leaks
+                member.train(original_training_state)
             
             if return_individual:
-                individual_predictions.append(mean_pred)
-                individual_uncertainties.append(var_pred)
+                # Convert logits to probabilities for individual predictions
+                individual_predictions.append(torch.sigmoid(mean_logits))
+                individual_uncertainties.append(var_logits)
         
         # Restore eval mode
         for member in self.members:
             member.eval()
         
-        # Convert to tensors
-        means_tensor = torch.stack(member_means, dim=0)  # [num_members, batch_size]
-        vars_tensor = torch.stack(member_vars, dim=0)    # [num_members, batch_size]
+        # Convert to tensors (NOW IN LOGIT SPACE)
+        logits_tensor = torch.stack(member_means, dim=0)  # [num_members, batch_size] - LOGITS
+        vars_tensor = torch.stack(member_vars, dim=0)      # [num_members, batch_size] - LOGIT VARIANCES
         
-        # Compute inverse-variance weights
-        epsilon = 1e-6  # Small value for numerical stability
-        inv_vars = 1.0 / (vars_tensor + epsilon)  # [num_members, batch_size]
+        # Use our numerical stability utilities for proper fusion
+        from utils.numerical import ensemble_logit_fusion
         
-        # Normalize weights to sum to 1
-        weights = inv_vars / inv_vars.sum(dim=0, keepdim=True)  # [num_members, batch_size]
+        # Perform logit-space fusion with numerical stability
+        ensemble_logits, ensemble_var = ensemble_logit_fusion(
+            logits_list=[logits_tensor[i] for i in range(logits_tensor.shape[0])],
+            variances_list=[vars_tensor[i] for i in range(vars_tensor.shape[0])]
+        )
         
-        # Weighted ensemble prediction
-        ensemble_pred = (weights * means_tensor).sum(dim=0)  # [batch_size]
+        # Convert final ensemble logits to probabilities for output
+        ensemble_pred = torch.sigmoid(ensemble_logits)
         
-        # Ensemble uncertainty (weighted average of variances)
-        ensemble_var = (weights * vars_tensor).sum(dim=0)  # [batch_size]
-        
-        # Average weights across batch for logging
+        # Compute weights for logging (from the fusion function)
+        from utils.numerical import inverse_variance_weights
+        weights = inverse_variance_weights(vars_tensor)
         avg_weights = weights.mean(dim=1)  # [num_members]
         
         if return_individual:
@@ -256,7 +265,7 @@ class UncertaintyWeightedEnsemble(nn.Module):
         
         # Member reliability (inverse of average uncertainty)
         var_tensor = torch.stack(individual_vars, dim=0)  # [num_members, batch_size]
-        member_reliability = 1.0 / (var_tensor.mean(dim=1) + 1e-6)
+        member_reliability = 1.0 / (var_tensor.mean(dim=1) + 1e-3)
         
         return {
             'ensemble_prediction': ensemble_pred,
@@ -277,6 +286,52 @@ class UncertaintyWeightedEnsemble(nn.Module):
             'temperatures': self.temperatures,
             'total_parameters': sum(p.numel() for p in self.parameters() if p.requires_grad)
         }
+    
+    def fit_temperature_scaling(
+        self,
+        val_inputs: Dict[str, torch.Tensor],
+        val_labels: torch.Tensor,
+        mc_samples: int = 10,
+        max_iter: int = 300
+    ) -> Dict[str, float]:
+        """
+        Fit per-member temperature scaling using validation data.
+        
+        Args:
+            val_inputs: Validation inputs for each member
+            val_labels: Validation labels
+            mc_samples: MC samples for uncertainty estimation
+            max_iter: Maximum optimization iterations
+            
+        Returns:
+            Dictionary of fitted temperatures per member
+        """
+        from calibration.temperature import TemperatureScaler
+        
+        fitted_temperatures = {}
+        
+        # Fit temperature for each member individually
+        for i, (member, name) in enumerate(zip(self.members, self.member_names)):
+            if name not in val_inputs:
+                continue
+                
+            print(f"Fitting temperature for {name}...")
+            
+            # Get member predictions
+            member.eval()
+            with torch.no_grad():
+                logits = member(val_inputs[name])
+            
+            # Fit temperature scaler
+            temp_scaler = TemperatureScaler()
+            temp_scaler.fit(logits, val_labels, max_iter=max_iter, verbose=True)
+            
+            # Store fitted temperature
+            fitted_temp = temp_scaler.temperature.item()
+            fitted_temperatures[name] = fitted_temp
+            self.temperatures[name] = fitted_temp
+            
+        return fitted_temperatures
 
 
 class SimpleEnsemble(nn.Module):

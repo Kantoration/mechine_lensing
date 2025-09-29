@@ -18,7 +18,6 @@ from ..backbones.resnet import ResNetBackbone
 from ..backbones.vit import ViTBackbone
 from ..backbones.light_transformer import LightTransformerBackbone
 from ..heads.binary import BinaryHead
-from ..heads.aleatoric import AleatoricBinaryHead, AleatoricLoss
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,9 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     'light_transformer': {
         'backbone_class': LightTransformerBackbone,
-        'backbone_kwargs': {},
+        'backbone_kwargs': {
+            'max_tokens': 256
+        },
         'feature_dim': 256,
         'input_size': 112,
         'description': 'Light Transformer: CNN features + Self-Attention (2M params)'
@@ -67,7 +68,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
             'pos_drop': 0.1,
             'drop_path_max': 0.1,
             'pooling': 'avg',
-            'freeze_until': 'none'
+            'freeze_until': 'none',
+            'max_tokens': 256
         },
         'feature_dim': 256,
         'input_size': 112,
@@ -80,8 +82,7 @@ def make_model(
     name: str, 
     bands: int = 3, 
     pretrained: bool = True,
-    dropout_p: float = 0.2,
-    use_aleatoric: bool = False
+    dropout_p: float = 0.2
 ) -> Tuple[nn.Module, nn.Module, int]:
     """
     Create a backbone-head pair for the specified architecture.
@@ -91,7 +92,6 @@ def make_model(
         bands: Number of input channels/bands
         pretrained: Whether to use pretrained weights
         dropout_p: Dropout probability for the classification head
-        use_aleatoric: Whether to use aleatoric uncertainty head
         
     Returns:
         Tuple of (backbone, head, feature_dim)
@@ -116,11 +116,8 @@ def make_model(
     })
     backbone = backbone_class(**backbone_kwargs)
     
-    # Create classification head (binary or aleatoric)
-    if use_aleatoric:
-        head = AleatoricBinaryHead(in_dim=feature_dim, dropout_p=dropout_p)
-    else:
-        head = BinaryHead(in_dim=feature_dim, p=dropout_p)
+    # Create binary classification head
+    head = BinaryHead(in_dim=feature_dim, p=dropout_p)
     
     logger.info(f"Created model pair: {name} with {bands} bands, "
                f"pretrained={pretrained}, dropout_p={dropout_p}")

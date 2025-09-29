@@ -23,6 +23,8 @@ model:
     drop_path_max: 0.1     # Maximum DropPath probability (linearly scheduled)
     pooling: avg           # Pooling strategy (avg/attn/cls)
     freeze_until: layer2   # CNN layers to freeze (none/layer2/layer3)
+    max_tokens: 256        # Maximum number of tokens (adaptive memory management)
+                           # If exceeded, provides helpful suggestions for config adjustment
   
   # Classification head
   head:

@@ -2,16 +2,9 @@
 Classification heads for gravitational lens classification.
 """
 
-from .binary import BinaryHead, MultiClassHead, create_binary_head, create_multiclass_head
-from .aleatoric import AleatoricBinaryHead, AleatoricLoss, create_aleatoric_head, analyze_aleatoric_uncertainty
+from .binary import BinaryHead, create_binary_head
 
 __all__ = [
     'BinaryHead',
-    'MultiClassHead', 
-    'create_binary_head',
-    'create_multiclass_head',
-    'AleatoricBinaryHead',
-    'AleatoricLoss',
-    'create_aleatoric_head',
-    'analyze_aleatoric_uncertainty'
+    'create_binary_head'
 ]

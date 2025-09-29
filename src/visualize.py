@@ -16,9 +16,9 @@ Outputs are saved under ./results:
 - tp_grid.png, fp_grid.png, fn_grid.png, tn_grid.png
 
 Usage (PowerShell):
-    .\venv\Scripts\Activate
+    .\\venv\\Scripts\\Activate
     pip install matplotlib scikit-learn pandas pillow numpy
-    py src\visualize.py --data-root data_scientific_test --predictions results\test_probs.csv
+    py src\\visualize.py --data-root data_scientific_test --predictions results\\test_probs.csv
 """
 
 from __future__ import annotations

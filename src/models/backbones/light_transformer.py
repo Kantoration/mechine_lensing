@@ -21,6 +21,7 @@ import logging
 import math
 from typing import Tuple, Optional, Literal, Dict, Any
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -304,7 +305,8 @@ class LightTransformerBackbone(nn.Module):
         pos_drop: float = 0.1,
         drop_path_max: float = 0.1,
         pooling: Literal["avg", "attn", "cls"] = "avg",
-        freeze_until: Literal["none", "layer2", "layer3"] = "none"
+        freeze_until: Literal["none", "layer2", "layer3"] = "none",
+        max_tokens: int = 256
     ):
         """
         Initialize enhanced light transformer backbone.
@@ -324,6 +326,7 @@ class LightTransformerBackbone(nn.Module):
             drop_path_max: Maximum DropPath probability (linearly scheduled)
             pooling: Pooling strategy ("avg", "attn", or "cls")
             freeze_until: CNN layers to freeze ("none", "layer2", or "layer3")
+            max_tokens: Maximum number of tokens allowed (for memory management)
         """
         super().__init__()
         
@@ -364,9 +367,11 @@ class LightTransformerBackbone(nn.Module):
         # Patch embedding from CNN features
         self.patch_embed = PatchEmbedding(cnn_feature_dim, patch_size, embed_dim)
         
-        # Dynamic positional embeddings (initialized for 8x8 = 64 patches max)
-        max_patches = 64
-        self.pos_embed = nn.Parameter(torch.zeros(1, max_patches, embed_dim))
+        # Dynamic positional embeddings with adaptive sizing
+        # Initialize for reasonable default, will interpolate as needed
+        self.max_tokens = max_tokens
+        initial_patches = min(64, max_tokens)  # Conservative initialization
+        self.pos_embed = nn.Parameter(torch.zeros(1, initial_patches, embed_dim))
         self.pos_drop = nn.Dropout(pos_drop)
         
         # CLS token for CLS pooling
@@ -563,8 +568,24 @@ class LightTransformerBackbone(nn.Module):
         patch_embeddings, Hp, Wp = self.patch_embed(cnn_features)
         B, N, _ = patch_embeddings.shape
         
-        # Token count assertion for safety
-        assert N <= 256, f"Too many tokens {N}. Increase patch_size or use deeper cnn_stage."
+        # Adaptive token management for memory efficiency
+        if N > self.max_tokens:
+            # Calculate optimal patch size for current input
+            optimal_patch_size = int(np.sqrt(N / self.max_tokens)) + 1
+            suggested_cnn_stage = "layer3" if self.cnn_stage == "layer2" else "layer3"
+            
+            error_msg = (
+                f"Token count {N} exceeds maximum {self.max_tokens}. "
+                f"Current config: patch_size={self.patch_size}, cnn_stage='{self.cnn_stage}'. "
+                f"Suggested fixes: "
+                f"1) Increase patch_size to {optimal_patch_size} "
+                f"2) Use deeper cnn_stage='{suggested_cnn_stage}' "
+                f"3) Increase max_tokens to {N} "
+                f"4) Reduce input image size"
+            )
+            
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Patch embeddings shape: {patch_embeddings.shape}, grid: {Hp}x{Wp}")

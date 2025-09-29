@@ -16,6 +16,9 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 
 import torch
 import torch.nn as nn
+
+# Import numerical stability utilities
+from utils.numerical import clamp_variances, inverse_variance_weights
 import torch.nn.functional as F
 
 from .registry import make_model, get_model_info
@@ -153,45 +156,52 @@ class EnhancedUncertaintyEnsemble(nn.Module):
         Returns:
             Dictionary containing MC samples and statistics
         """
-        model.train()  # Enable dropout
+        # Store original training state
+        original_training_state = model.training
         
-        has_aleatoric = self.member_has_aleatoric[member_name]
-        
-        if has_aleatoric:
-            # Model with aleatoric head returns dict
-            logits_samples = []
-            log_var_samples = []
+        try:
+            model.train()  # Enable dropout
             
-            with torch.no_grad():
-                for _ in range(mc_samples):
-                    outputs = model(x)
-                    logits_samples.append(outputs['logits'])
-                    log_var_samples.append(outputs['log_var'])
+            has_aleatoric = self.member_has_aleatoric[member_name]
             
-            logits_stack = torch.stack(logits_samples, dim=0)  # [mc_samples, batch_size]
-            log_var_stack = torch.stack(log_var_samples, dim=0)
-            
-            return {
-                'logits_samples': logits_stack,
-                'log_var_samples': log_var_stack,
-                'has_aleatoric': True,
-                'aleatoric_variance': torch.exp(log_var_stack.mean(dim=0))  # Average aleatoric variance
-            }
-        else:
-            # Standard model returns logits only
-            logits_samples = []
-            
-            with torch.no_grad():
-                for _ in range(mc_samples):
-                    logits = model(x)
-                    logits_samples.append(logits)
-            
-            logits_stack = torch.stack(logits_samples, dim=0)
-            
-            return {
-                'logits_samples': logits_stack,
-                'has_aleatoric': False
-            }
+            if has_aleatoric:
+                # Model with aleatoric head returns dict
+                logits_samples = []
+                log_var_samples = []
+                
+                with torch.no_grad():
+                    for _ in range(mc_samples):
+                        outputs = model(x)
+                        logits_samples.append(outputs['logits'])
+                        log_var_samples.append(outputs['log_var'])
+                
+                logits_stack = torch.stack(logits_samples, dim=0)  # [mc_samples, batch_size]
+                log_var_stack = torch.stack(log_var_samples, dim=0)
+                
+                return {
+                    'logits_samples': logits_stack,
+                    'log_var_samples': log_var_stack,
+                    'has_aleatoric': True,
+                    'aleatoric_variance': torch.exp(log_var_stack.mean(dim=0))  # Average aleatoric variance
+                }
+            else:
+                # Standard model returns logits only
+                logits_samples = []
+                
+                with torch.no_grad():
+                    for _ in range(mc_samples):
+                        logits = model(x)
+                        logits_samples.append(logits)
+                
+                logits_stack = torch.stack(logits_samples, dim=0)
+                
+                return {
+                    'logits_samples': logits_stack,
+                    'has_aleatoric': False
+                }
+        finally:
+            # Always restore original training state to prevent memory leaks
+            model.train(original_training_state)
     
     def forward(
         self,

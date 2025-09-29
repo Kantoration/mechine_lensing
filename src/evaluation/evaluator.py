@@ -47,6 +47,8 @@ from sklearn.metrics import (
 
 from datasets.lens_dataset import LensDataset
 from models import build_model, list_available_architectures
+from calibration.temperature import TemperatureScaler, compute_calibration_metrics
+from metrics.calibration import reliability_diagram
 
 # Setup logging
 logging.basicConfig(
@@ -420,6 +422,111 @@ def main():
         logger.error(f"Evaluation failed: {e}")
         raise
 
+
+def evaluate_with_calibration(
+    model: nn.Module,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    device: torch.device,
+    save_plots: bool = True,
+    output_dir: Optional[Path] = None
+) -> Dict[str, float]:
+    """
+    Evaluate model with temperature scaling and calibration metrics.
+    
+    Args:
+        model: Trained model to evaluate
+        val_loader: Validation data for temperature fitting
+        test_loader: Test data for evaluation
+        device: Device to run on
+        save_plots: Whether to save reliability diagrams
+        output_dir: Directory to save plots
+        
+    Returns:
+        Dictionary with calibration metrics before and after temperature scaling
+    """
+    model.eval()
+    
+    # Collect validation predictions for temperature fitting
+    val_logits = []
+    val_labels = []
+    
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            
+            logits = model(inputs)
+            val_logits.append(logits.cpu())
+            val_labels.append(targets.cpu())
+    
+    val_logits = torch.cat(val_logits, dim=0)
+    val_labels = torch.cat(val_labels, dim=0)
+    
+    # Collect test predictions
+    test_logits = []
+    test_labels = []
+    
+    with torch.no_grad():
+        for inputs, targets in test_loader:
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            
+            logits = model(inputs)
+            test_logits.append(logits.cpu())
+            test_labels.append(targets.cpu())
+    
+    test_logits = torch.cat(test_logits, dim=0)
+    test_labels = torch.cat(test_labels, dim=0)
+    
+    # Compute calibration metrics before temperature scaling
+    test_probs_before = torch.sigmoid(test_logits.squeeze(1))
+    metrics_before = compute_calibration_metrics(test_logits, test_labels)
+    
+    # Fit temperature scaling on validation set
+    temp_scaler = TemperatureScaler()
+    temp_scaler.fit(val_logits, val_labels)
+    
+    # Apply temperature scaling to test set
+    test_logits_calibrated = temp_scaler(test_logits)
+    test_probs_after = torch.sigmoid(test_logits_calibrated.squeeze(1))
+    metrics_after = compute_calibration_metrics(test_logits_calibrated, test_labels)
+    
+    # Create reliability diagrams
+    if save_plots and output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Before temperature scaling
+        reliability_diagram(
+            test_probs_before, test_labels,
+            save_path=output_dir / "reliability_before_temp_scaling.png",
+            title="Reliability Diagram (Before Temperature Scaling)"
+        )
+        
+        # After temperature scaling
+        reliability_diagram(
+            test_probs_after, test_labels,
+            save_path=output_dir / "reliability_after_temp_scaling.png",
+            title="Reliability Diagram (After Temperature Scaling)"
+        )
+    
+    # Combine results
+    results = {
+        'temperature': temp_scaler.temperature.item(),
+        'nll_before': metrics_before['nll'],
+        'nll_after': metrics_after['nll'],
+        'ece_before': metrics_before['ece'],
+        'ece_after': metrics_after['ece'],
+        'mce_before': metrics_before['mce'],
+        'mce_after': metrics_after['mce'],
+        'brier_before': metrics_before['brier'],
+        'brier_after': metrics_after['brier'],
+        'nll_improvement': metrics_before['nll'] - metrics_after['nll'],
+        'ece_improvement': metrics_before['ece'] - metrics_after['ece']
+    }
+    
+    return results
 
 def evaluate_with_aleatoric_analysis(
     model: nn.Module,
