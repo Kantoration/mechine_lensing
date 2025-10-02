@@ -38,7 +38,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from torch.utils.data import DataLoader, random_split
 
 from src.datasets.lens_dataset import LensDataset
-from src.models import create_model, list_available_models
+from src.models import create_model, ModelConfig, list_available_models, get_model_info
 from src.models.ensemble.registry import make_model as make_ensemble_model
 from src.utils.numerical import clamp_probs
 
@@ -464,17 +464,23 @@ def main():
             )
             model = nn.Sequential(backbone, head)
         else:
-            model = create_model(
-                arch=args.arch,
+            # Use unified model factory with ModelConfig
+            model_config = ModelConfig(
+                model_type="single",
+                architecture=args.arch,
+                bands=3,  # Default to RGB, could be made configurable
                 pretrained=args.pretrained,
-                dropout_rate=args.dropout_rate
+                dropout_p=args.dropout_rate
             )
+            model = create_model(model_config)
         
         model = model.to(device)
         
         # Auto-detect image size if not specified
         if args.img_size is None:
-            args.img_size = model.get_input_size()
+            # Get image size from model info registry instead of non-existent method
+            model_info = get_model_info(args.arch)
+            args.img_size = model_info.get('input_size', 224)
             logger.info(f"Auto-detected image size for {args.arch}: {args.img_size}")
         
         # Create optimized data loaders
