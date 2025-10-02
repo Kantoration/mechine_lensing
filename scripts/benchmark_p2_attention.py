@@ -522,7 +522,7 @@ def build_model(arch: str, **config) -> nn.Module:
         Configured model
     """
     if arch.startswith('resnet') or arch == 'vit_b_16':
-        from models import build_model as model_builder
+        from src.models import build_model as model_builder
         return model_builder(arch=arch, pretrained=True)
     else:
         # For attention-based models, use the enhanced transformer

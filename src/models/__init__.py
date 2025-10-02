@@ -16,6 +16,16 @@ from .unified_factory import (
     list_available_models, get_model_info,
     build_model  # Backward compatibility
 )
+
+# Backward compatibility wrapper for list_available_architectures
+def list_available_architectures():
+    """Backward compatibility wrapper for list_available_models.
+    
+    Returns:
+        List of available model architectures (single models + physics models)
+    """
+    models_dict = list_available_models()
+    return models_dict.get('single_models', []) + models_dict.get('physics_models', [])
 from .ensemble import (
     make_model, get_model_info as get_ensemble_model_info, list_available_models as list_ensemble_models,
     UncertaintyWeightedEnsemble, create_uncertainty_weighted_ensemble
@@ -30,6 +40,7 @@ __all__ = [
     'list_available_models',
     'get_model_info',
     'build_model',  # Backward compatibility
+    'list_available_architectures',  # Backward compatibility
     
     # Legacy compatibility (removed deprecated factory) 
     'LensClassifier',

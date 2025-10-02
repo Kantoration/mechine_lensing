@@ -32,11 +32,11 @@ from torch.utils.data import DataLoader
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from datasets.lens_dataset import LensDataset
-from models import build_model, list_available_architectures
-from models.ensemble.registry import make_model as make_ensemble_model, list_available_models
-from utils.benchmark import BenchmarkSuite, PerformanceMetrics
-from utils.numerical import clamp_probs
+from src.datasets.lens_dataset import LensDataset
+from src.models import build_model, list_available_models
+from src.models.ensemble.registry import make_model as make_ensemble_model
+from src.utils.benchmark import BenchmarkSuite, PerformanceMetrics
+from src.utils.numerical import clamp_probs
 
 # Setup logging
 logging.basicConfig(
@@ -67,9 +67,12 @@ class PerformanceTester:
         logger.info(f"Using device: {self.device}")
         
         # Get available architectures
-        self.available_archs = list_available_architectures()
+        models_dict = list_available_models()
+        self.available_archs = models_dict.get('single_models', []) + models_dict.get('physics_models', [])
         try:
-            self.available_archs.extend(list_available_models())
+            from src.models.ensemble.registry import list_available_models as list_ensemble_models
+            ensemble_archs = list_ensemble_models()
+            self.available_archs.extend(ensemble_archs)
             self.available_archs = list(dict.fromkeys(self.available_archs))
         except ImportError:
             pass
