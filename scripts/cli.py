@@ -20,9 +20,9 @@ import logging
 import sys
 from pathlib import Path
 
-# SINGLE PATH SHIM - Add src to path (only place in codebase where this should happen)
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Setup project paths using centralized utility
+from src.utils.path_utils import setup_project_paths
+project_root = setup_project_paths()
 
 from _common import setup_logging, get_device, setup_seed
 

@@ -1,0 +1,189 @@
+# ============================================================================
+# PHYSICS-INFORMED ENSEMBLE CONFIGURATION
+# ============================================================================
+# Configuration for ensemble combining traditional and physics-informed models
+# for enhanced gravitational lensing detection.
+
+# ============================================================================
+# GENERAL SETTINGS
+# ============================================================================
+General:
+  n_train: 1800                 # Training samples
+  n_test: 200                   # Test samples
+  image_size: 112               # Image dimensions (112x112 for transformers)
+  seed: 42                      # Random seed for reproducibility
+  balance: 0.5                  # 50-50 class balance
+  backend: "synthetic"          # Use synthetic generation
+
+# ============================================================================
+# ENSEMBLE CONFIGURATION
+# ============================================================================
+ensemble:
+  physics_weight: 0.1           # Weight for physics regularization losses
+  uncertainty_estimation: true  # Enable uncertainty-based weighting
+  attention_analysis: true      # Analyze attention maps
+  fusion_strategy: "physics_aware"  # Fusion strategy
+
+# ============================================================================
+# ENSEMBLE MEMBERS
+# ============================================================================
+members:
+  - name: "resnet18"            # Traditional CNN baseline
+    bands: 3
+    pretrained: true
+    dropout_p: 0.2
+    weight: 0.25                # Initial ensemble weight
+    
+  - name: "enhanced_light_transformer_arc_aware"  # Arc-aware attention
+    bands: 3
+    pretrained: true
+    dropout_p: 0.1
+    weight: 0.3                 # Higher weight for specialized model
+    physics_config:
+      arc_prior_strength: 0.15  # Stronger arc priors
+      curvature_sensitivity: 1.2
+    
+  - name: "enhanced_light_transformer_multi_scale"  # Multi-scale attention
+    bands: 3
+    pretrained: true
+    dropout_p: 0.1
+    weight: 0.25
+    physics_config:
+      scales: [1, 2, 4, 8]      # Extended scale range
+      fusion_method: "attention"
+    
+  - name: "enhanced_light_transformer_adaptive"  # Adaptive physics attention
+    bands: 3
+    pretrained: true
+    dropout_p: 0.1
+    weight: 0.2
+    physics_config:
+      adaptation_layers: 3       # More adaptation layers
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+training:
+  epochs: 20
+  batch_size: 16               # Smaller batch size for transformers
+  learning_rate: 0.001
+  weight_decay: 0.01
+  scheduler: "cosine"
+  warmup_epochs: 2
+  
+  # Physics-specific training settings
+  physics_loss_weight: 0.1     # Weight for physics regularization
+  physics_warmup_epochs: 5     # Gradually increase physics weight
+  attention_supervision: true  # Supervise attention maps
+
+# ============================================================================
+# EVALUATION CONFIGURATION
+# ============================================================================
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "roc_auc"
+    - "physics_consistency"     # Physics-specific metric
+    - "attention_quality"       # Attention map quality
+  
+  uncertainty_analysis: true   # Analyze predictive uncertainty
+  attention_visualization: true  # Visualize attention maps
+  physics_validation: true     # Validate physics constraints
+
+# ============================================================================
+# PHYSICS VALIDATION SETTINGS
+# ============================================================================
+physics_validation:
+  check_arc_detection: true    # Validate arc detection quality
+  check_curvature_maps: true   # Validate curvature attention
+  check_radial_patterns: true # Validate radial attention patterns
+  check_multi_scale: true     # Validate multi-scale consistency
+  
+  thresholds:
+    arc_quality_min: 0.7       # Minimum arc detection quality
+    curvature_consistency: 0.8 # Curvature pattern consistency
+    scale_coherence: 0.75      # Multi-scale coherence
+
+# ============================================================================
+# NOISE PARAMETERS (realistic observational noise)
+# ============================================================================
+Noise:
+  gaussian_sigma: 0.05          # Gaussian noise standard deviation
+  poisson_strength: 0.02        # Poisson noise strength
+  background_level: 0.01        # Background noise level
+  readout_noise: 5.0            # CCD readout noise
+
+# ============================================================================
+# LENS IMAGE PARAMETERS (galaxy + lensing arcs)
+# ============================================================================
+LensArcs:
+  # Background galaxy (every lens image has a galaxy)
+  galaxy_sigma_min: 3.0         # Galaxy size range
+  galaxy_sigma_max: 8.0
+  galaxy_brightness_min: 0.4    # Galaxy brightness
+  galaxy_brightness_max: 0.8
+  galaxy_ellipticity_min: 0.0
+  galaxy_ellipticity_max: 0.5
+  
+  # Lensing arcs (subtle, realistic)
+  min_arcs: 1                   # At least one arc
+  max_arcs: 2                   # Maximum two arcs
+  min_radius: 8.0               # Arc radius range
+  max_radius: 20.0
+  arc_width_min: 0.8            # Thin arcs (realistic)
+  arc_width_max: 2.0
+  
+  # Arc brightness (subtle - key challenge!)
+  brightness_min: 0.2           # Faint arcs (realistic)
+  brightness_max: 0.6           # Not too bright
+  
+  blur_sigma: 1.2               # Realistic PSF blur
+  asymmetry: 0.15              # Arc asymmetry factor
+
+# ============================================================================
+# NON-LENS IMAGE PARAMETERS (just galaxies)
+# ============================================================================
+GalaxyBlob:
+  sigma_min: 3.0                # Same size range as lens galaxies
+  sigma_max: 8.0
+  ellipticity_min: 0.0          # Same ellipticity range
+  ellipticity_max: 0.5
+  brightness_min: 0.4           # OVERLAPPING brightness with lens galaxies
+  brightness_max: 0.8
+  blur_sigma: 1.2               # Same PSF blur
+  
+  # Add multiple components (complex galaxies)
+  n_components_min: 1           # Some galaxies have multiple components
+  n_components_max: 3
+  
+  # Sersic profile parameters
+  sersic_index_min: 1.0         # Exponential profile
+  sersic_index_max: 4.0         # de Vaucouleurs profile
+
+# ============================================================================
+# OUTPUT SETTINGS
+# ============================================================================
+Output:
+  create_split_subdirs: true    # train/, test/ directories
+  create_class_subdirs: true    # lens/, nonlens/ subdirectories
+  image_format: "PNG"           # PNG format
+  image_quality: 95             # High quality
+  relative_paths: true          # Use relative paths in CSV
+  lens_prefix: "lens"           # Lens image filename prefix
+  nonlens_prefix: "nonlens"     # Non-lens image filename prefix
+  include_metadata: true        # Include physics metadata
+
+# ============================================================================
+# DEBUG SETTINGS
+# ============================================================================
+Debug:
+  save_sample_images: true      # Save sample images for inspection
+  log_generation_stats: true    # Log detailed generation statistics
+  verbose_validation: true      # Detailed validation logging
+  save_attention_maps: true     # Save attention visualizations
+  physics_debug: true           # Enable physics debugging
+
+

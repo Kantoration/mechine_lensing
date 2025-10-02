@@ -17,9 +17,9 @@ from typing import Optional, Dict, Any
 import torch
 from torch.utils.data import DataLoader
 
-# Add src to path for imports
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+# Setup project paths using centralized utility
+from src.utils.path_utils import setup_project_paths
+project_root = setup_project_paths()
 
 from datasets.lens_dataset import LensDataset
 

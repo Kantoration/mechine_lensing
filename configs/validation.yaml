@@ -1,0 +1,166 @@
+# Comprehensive Physics Validation Configuration
+# =============================================
+
+# Output configuration
+output_dir: "validation_reports"
+figsize: [12, 8]
+dpi: 300
+
+# Validation parameters
+validation:
+  # Einstein radius validation
+  einstein_radius:
+    pixel_scale: 0.1  # arcsec/pixel
+    tolerance: 0.2    # relative tolerance
+  
+  # Arc multiplicity validation
+  arc_multiplicity:
+    min_arc_length: 5.0  # pixels
+  
+  # Lensing equation validation
+  lensing_equation:
+    pixel_scale: 0.1
+    tolerance: 0.1  # arcsec
+  
+  # Time delay validation
+  time_delays:
+    lens_redshift: 0.5
+    source_redshift: 2.0
+  
+  # Uncertainty validation
+  uncertainty:
+    confidence_levels: [0.68, 0.95, 0.99]
+    n_bins: 10
+  
+  # Source reconstruction
+  source_reconstruction:
+    source_pixel_scale: 0.05  # arcsec/pixel
+    regularization_weight: 1e-3
+    method: "regularized"  # linear_inversion, regularized, mcmc
+
+# Realistic lens models
+realistic_models:
+  # SIE model parameters
+  sie:
+    einstein_radius_range: [1.0, 5.0]  # arcsec
+    ellipticity_range: [0.0, 0.3]
+    position_angle_range: [0, 6.28]  # radians
+  
+  # NFW model parameters
+  nfw:
+    scale_radius_range: [0.5, 2.5]  # arcsec
+    concentration_range: [3.0, 8.0]
+  
+  # Composite model parameters
+  composite:
+    max_components: 3
+    external_shear_range: [0.0, 0.1]
+
+# Visualization settings
+visualization:
+  # Attention visualization
+  attention:
+    max_samples: 16
+    colormap: "attention"
+    vmin: 0
+    vmax: 1
+  
+  # Physics validation plots
+  physics:
+    n_bins: 20
+    confidence_levels: [0.68, 0.95, 0.99]
+  
+  # Publication figures
+  publication:
+    style: "seaborn-v0_8-whitegrid"
+    font_size: 12
+    title_size: 16
+
+# Reporting settings
+reporting:
+  # HTML report
+  html:
+    include_interactive: true
+    include_plots: true
+  
+  # JSON report
+  json:
+    include_metadata: true
+    include_recommendations: true
+  
+  # CSV report
+  csv:
+    include_categories: true
+  
+  # Interactive plots
+  interactive:
+    use_plotly: true
+    include_radar_chart: true
+
+# Model information
+model_info:
+  model_type: "attention_based"
+  architecture: "CNN-Transformer hybrid"
+  attention_mechanism: "physics-informed"
+  regularization: "physics-regularized"
+
+# Dataset information
+dataset_info:
+  dataset_type: "synthetic_lensing"
+  image_size: [64, 64]
+  pixel_scale: 0.1
+  bands: ["g", "r", "i"]
+  noise_model: "gaussian_poisson"
+
+# Validation thresholds
+thresholds:
+  # Overall score thresholds
+  overall_score:
+    excellent: 0.8
+    good: 0.6
+    poor: 0.4
+  
+  # Individual metric thresholds
+  einstein_radius:
+    mae_threshold: 0.5  # arcsec
+    correlation_threshold: 0.7
+  
+  arc_multiplicity:
+    f1_threshold: 0.7
+    accuracy_threshold: 0.8
+  
+  arc_parity:
+    accuracy_threshold: 0.7
+  
+  lensing_equation:
+    mae_threshold: 0.2  # arcsec
+  
+  uncertainty:
+    coverage_tolerance: 0.05
+    ece_threshold: 0.1
+  
+  source_reconstruction:
+    correlation_threshold: 0.8
+    physicality_threshold: 0.7
+
+# Recommendations
+recommendations:
+  # Automatic recommendations based on scores
+  auto_recommendations: true
+  
+  # Custom recommendations
+  custom:
+    - "Validate on real survey data"
+    - "Consider ensemble methods"
+    - "Implement uncertainty quantification"
+    - "Add source reconstruction capabilities"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "validation.log"
+
+
+
+

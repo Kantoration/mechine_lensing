@@ -16,6 +16,7 @@ import torch.nn as nn
 
 from ..backbones.resnet import ResNetBackbone
 from ..backbones.vit import ViTBackbone
+from ..backbones.enhanced_light_transformer import EnhancedLightTransformerBackbone
 from ..backbones.light_transformer import LightTransformerBackbone
 from ..heads.binary import BinaryHead
 
@@ -74,6 +75,59 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         'feature_dim': 256,
         'input_size': 112,
         'description': 'Enhanced Light Transformer: Production-ready CNN+Transformer with advanced regularization'
+    },
+    'enhanced_light_transformer_arc_aware': {
+        'backbone_class': EnhancedLightTransformerBackbone,
+        'backbone_kwargs': {
+            'cnn_stage': 'layer3',
+            'patch_size': 2,
+            'embed_dim': 256,
+            'num_heads': 4,
+            'num_layers': 4,
+            'attention_type': 'arc_aware',
+            'attention_config': {
+                'arc_prior_strength': 0.1,
+                'curvature_sensitivity': 1.0
+            }
+        },
+        'feature_dim': 256,
+        'input_size': 112,
+        'description': 'Enhanced Light Transformer with arc-aware attention for gravitational lensing detection'
+    },
+    'enhanced_light_transformer_multi_scale': {
+        'backbone_class': EnhancedLightTransformerBackbone,
+        'backbone_kwargs': {
+            'cnn_stage': 'layer3',
+            'patch_size': 2,
+            'embed_dim': 256,
+            'num_heads': 4,
+            'num_layers': 4,
+            'attention_type': 'multi_scale',
+            'attention_config': {
+                'scales': [1, 2, 4],
+                'fusion_method': 'weighted_sum'
+            }
+        },
+        'feature_dim': 256,
+        'input_size': 112,
+        'description': 'Enhanced Light Transformer with multi-scale attention for different arc sizes'
+    },
+    'enhanced_light_transformer_adaptive': {
+        'backbone_class': EnhancedLightTransformerBackbone,
+        'backbone_kwargs': {
+            'cnn_stage': 'layer3',
+            'patch_size': 2,
+            'embed_dim': 256,
+            'num_heads': 4,
+            'num_layers': 4,
+            'attention_type': 'adaptive',
+            'attention_config': {
+                'adaptation_layers': 2
+            }
+        },
+        'feature_dim': 256,
+        'input_size': 112,
+        'description': 'Enhanced Light Transformer with adaptive attention based on image characteristics'
     }
 }
 
@@ -285,3 +339,26 @@ def create_resnet_vit_ensemble(bands: int = 3, pretrained: bool = True) -> list[
 def create_resnet_ensemble(bands: int = 3, pretrained: bool = True) -> list[Tuple[nn.Module, nn.Module]]:
     """Create a ResNet-18 + ResNet-34 ensemble."""
     return create_ensemble_members(['resnet18', 'resnet34'], bands=bands, pretrained=pretrained)
+
+
+def create_physics_informed_ensemble(bands: int = 3, pretrained: bool = True) -> list[Tuple[nn.Module, nn.Module]]:
+    """Create an ensemble with physics-informed attention mechanisms."""
+    architectures = [
+        'resnet18',  # Baseline CNN
+        'enhanced_light_transformer_arc_aware',  # Arc detection
+        'enhanced_light_transformer_multi_scale',  # Multi-scale features
+        'enhanced_light_transformer_adaptive'  # Adaptive attention
+    ]
+    return create_ensemble_members(architectures, bands=bands, pretrained=pretrained)
+
+
+def create_comprehensive_ensemble(bands: int = 3, pretrained: bool = True) -> list[Tuple[nn.Module, nn.Module]]:
+    """Create a comprehensive ensemble combining traditional and physics-informed models."""
+    architectures = [
+        'resnet18',  # Fast CNN baseline
+        'resnet34',  # Deeper CNN
+        'vit_b16',   # Transformer baseline
+        'enhanced_light_transformer_arc_aware',  # Physics-informed arc detection
+        'enhanced_light_transformer_adaptive'   # Adaptive physics attention
+    ]
+    return create_ensemble_members(architectures, bands=bands, pretrained=pretrained)

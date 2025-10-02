@@ -22,7 +22,8 @@ from utils.numerical import clamp_variances, inverse_variance_weights
 import torch.nn.functional as F
 
 from .registry import make_model, get_model_info
-from ..heads.aleatoric import AleatoricBinaryHead, AleatoricLoss
+# Note: Aleatoric analysis moved to post-hoc analysis module
+# from analysis.aleatoric import AleatoricIndicators  # Only for post-hoc analysis
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,7 @@ class EnhancedUncertaintyEnsemble(nn.Module):
                 name=name,
                 bands=bands,
                 pretrained=pretrained,
-                dropout_p=dropout_p,
-                use_aleatoric=use_aleatoric
+                dropout_p=dropout_p
             )
             
             # Combine into single model
@@ -147,6 +147,8 @@ class EnhancedUncertaintyEnsemble(nn.Module):
         """
         Run Monte Carlo dropout for a single ensemble member.
         
+        CRITICAL FIX: Ensures model training state is always restored to prevent memory leaks.
+        
         Args:
             model: Ensemble member model
             x: Input tensor
@@ -160,47 +162,32 @@ class EnhancedUncertaintyEnsemble(nn.Module):
         original_training_state = model.training
         
         try:
-            model.train()  # Enable dropout
+            model.train()  # Enable dropout for MC sampling
             
-            has_aleatoric = self.member_has_aleatoric[member_name]
+            # For now, assume all models return standard logits
+            # Aleatoric uncertainty moved to post-hoc analysis
+            has_aleatoric = False
             
-            if has_aleatoric:
-                # Model with aleatoric head returns dict
-                logits_samples = []
-                log_var_samples = []
-                
-                with torch.no_grad():
-                    for _ in range(mc_samples):
-                        outputs = model(x)
-                        logits_samples.append(outputs['logits'])
-                        log_var_samples.append(outputs['log_var'])
-                
-                logits_stack = torch.stack(logits_samples, dim=0)  # [mc_samples, batch_size]
-                log_var_stack = torch.stack(log_var_samples, dim=0)
-                
-                return {
-                    'logits_samples': logits_stack,
-                    'log_var_samples': log_var_stack,
-                    'has_aleatoric': True,
-                    'aleatoric_variance': torch.exp(log_var_stack.mean(dim=0))  # Average aleatoric variance
-                }
-            else:
-                # Standard model returns logits only
-                logits_samples = []
-                
-                with torch.no_grad():
-                    for _ in range(mc_samples):
-                        logits = model(x)
-                        logits_samples.append(logits)
-                
-                logits_stack = torch.stack(logits_samples, dim=0)
-                
-                return {
-                    'logits_samples': logits_stack,
-                    'has_aleatoric': False
-                }
+            # Standard model returns logits only
+            logits_samples = []
+            
+            with torch.no_grad():
+                for _ in range(mc_samples):
+                    logits = model(x)
+                    # Ensure logits is a tensor, not a dict
+                    if isinstance(logits, dict):
+                        logits = logits.get('logits', logits.get('predictions', logits))
+                    logits_samples.append(logits)
+            
+            logits_stack = torch.stack(logits_samples, dim=0)  # [mc_samples, batch_size]
+            
+            return {
+                'logits_samples': logits_stack,
+                'has_aleatoric': has_aleatoric
+            }
+            
         finally:
-            # Always restore original training state to prevent memory leaks
+            # CRITICAL: Always restore original training state to prevent memory leaks
             model.train(original_training_state)
     
     def forward(

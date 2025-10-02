@@ -627,3 +627,8 @@ def train_with_progress(model, dataloader, criterion, optimizer, device):
 ```
 
 This technical documentation provides the implementation details needed to understand, modify, and extend the gravitational lens classification system.
+
+
+
+
+

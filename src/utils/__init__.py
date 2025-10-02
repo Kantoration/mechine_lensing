@@ -7,6 +7,10 @@ from .numerical import (
     clamp_probs, clamp_variances, stable_log_sigmoid, 
     inverse_variance_weights, ensemble_logit_fusion
 )
+from .benchmark import (
+    BenchmarkSuite, PerformanceMetrics, profile_training,
+    profile_inference, benchmark_ensemble
+)
 
 __all__ = [
     'load_config',
@@ -15,5 +19,10 @@ __all__ = [
     'clamp_variances', 
     'stable_log_sigmoid',
     'inverse_variance_weights',
-    'ensemble_logit_fusion'
+    'ensemble_logit_fusion',
+    'BenchmarkSuite',
+    'PerformanceMetrics',
+    'profile_training',
+    'profile_inference',
+    'benchmark_ensemble'
 ]

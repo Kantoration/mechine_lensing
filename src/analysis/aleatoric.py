@@ -384,6 +384,8 @@ def topk_indices(
     """
     if class_balance is None:
         # Simple top-k selection
+        # Ensure k doesn't exceed the number of available samples
+        k = min(k, len(scores))
         _, indices = torch.topk(scores, k, largest=True)
         return indices
     
@@ -405,6 +407,10 @@ def topk_indices(
         
         pos_indices = torch.where(pos_mask)[0]
         neg_indices = torch.where(neg_mask)[0]
+        
+        # Adjust k if we don't have enough samples
+        k_pos = min(k_pos, len(pos_indices))
+        k_neg = min(k_neg, len(neg_indices))
         
         # Select top-k from each class
         selected_indices = []

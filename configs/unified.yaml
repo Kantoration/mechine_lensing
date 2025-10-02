@@ -1,0 +1,87 @@
+# Unified Configuration for Gravitational Lens Classification
+# =========================================================
+# 
+# This configuration file provides a single source of truth for all
+# training, evaluation, and model parameters across the project.
+
+# Data Configuration
+data:
+  root: "data/processed/data_realistic_test"
+  batch_size: 64
+  img_size: 224
+  val_split: 0.1
+  num_workers: null  # Auto-tune based on system
+  pin_memory: null   # Auto-tune based on GPU availability
+  use_cache: true
+  cache_dir: "cache"
+  validate_paths: true
+
+# Model Configuration
+model:
+  type: "single"  # "single", "ensemble", "physics_informed"
+  architecture: "resnet18"
+  architectures:  # For ensemble models
+    - "resnet18"
+    - "vit_b_16"
+  bands: 3
+  pretrained: true
+  dropout_p: 0.2
+  
+  # Ensemble specific
+  ensemble_strategy: "uncertainty_weighted"  # "uncertainty_weighted", "physics_informed"
+  physics_weight: 0.1
+  uncertainty_estimation: true
+
+# Training Configuration
+training:
+  epochs: 20
+  learning_rate: 1e-3
+  weight_decay: 1e-4
+  scheduler: "reduce_on_plateau"
+  scheduler_patience: 5
+  scheduler_factor: 0.5
+  
+  # Performance optimizations
+  use_mixed_precision: true
+  gradient_checkpointing: false
+  gradient_clip_val: 1.0
+  
+  # Checkpointing
+  save_every: 5
+  checkpoint_dir: "checkpoints"
+  best_model_name: "best_model.pt"
+
+# Evaluation Configuration
+evaluation:
+  save_predictions: true
+  plot_results: true
+  output_dir: "results"
+  detailed_metrics: true
+  
+  # Physics analysis (for physics-informed models)
+  physics_analysis: true
+  attention_analysis: true
+
+# System Configuration
+system:
+  device: "auto"  # "auto", "cpu", "cuda"
+  seed: 42
+  deterministic: false
+  num_workers: null  # Auto-tune
+  pin_memory: null   # Auto-tune
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)-8s | %(message)s"
+  file: null  # Log to file if specified
+  console: true
+
+# Performance Monitoring
+monitoring:
+  benchmark_dataloader: true
+  benchmark_model_creation: true
+  profile_training: false
+  memory_monitoring: true
+
+

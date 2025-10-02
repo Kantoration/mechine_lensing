@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""
-make_dataset_scientific.py
-==========================
+generate_dataset.py
+===================
 Production-grade astronomical dataset generator following scientific computing best practices.
 
 This refactored version addresses critical issues in scientific software development:
@@ -25,7 +25,7 @@ References:
 - PEP 526: Variable Annotations
 
 Usage:
-    python src/make_dataset_scientific.py --config configs/comprehensive.yaml --out data --backend auto --log-level INFO
+    python scripts/generate_dataset.py --config configs/comprehensive.yaml --out data --backend auto --log-level INFO
 """
 
 from __future__ import annotations
@@ -1004,13 +1004,13 @@ def main() -> None:
         epilog="""
 Examples:
   # Basic usage with INFO logging
-  python src/make_dataset_scientific.py --config configs/comprehensive.yaml
+  python scripts/generate_dataset.py --config configs/comprehensive.yaml
   
   # Debug mode with file logging
-  python src/make_dataset_scientific.py --log-level DEBUG --log-file logs/generation.log
+  python scripts/generate_dataset.py --log-level DEBUG --log-file logs/generation.log
   
   # Production run with validation
-  python src/make_dataset_scientific.py --validate --backend synthetic
+  python scripts/generate_dataset.py --validate --backend synthetic
         """
     )
     
