@@ -7,9 +7,14 @@ Performance benchmarking utilities for training and inference.
 Key Features:
 - Comprehensive performance profiling
 - Memory usage monitoring
-- GPU utilization tracking
+- GPU utilization tracking (requires GPUtil package)
 - Throughput and latency measurements
 - Comparative analysis across models and configurations
+
+Dependencies:
+- GPUtil: Optional dependency for GPU utilization monitoring
+  Install with: pip install GPUtil
+  Or install dev requirements: pip install -r requirements-dev.txt
 
 Usage:
     from utils.benchmark import BenchmarkSuite, profile_training, profile_inference
@@ -27,7 +32,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import psutil
-import GPUtil
+
+# Optional dependency for GPU monitoring
+try:
+    import GPUtil
+    GPUTIL_AVAILABLE = True
+except ImportError:
+    GPUtil = None
+    GPUTIL_AVAILABLE = False
+    logger.warning("GPUtil not available. GPU utilization monitoring will be disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -115,13 +128,16 @@ class BenchmarkSuite:
             metrics['gpu_memory_reserved_gb'] = torch.cuda.max_memory_reserved() / 1e9
         
         # GPU utilization (if available)
-        try:
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                metrics['gpu_utilization'] = gpus[0].load * 100
-                metrics['gpu_temperature'] = gpus[0].temperature
-        except:
-            pass
+        if GPUTIL_AVAILABLE:
+            try:
+                gpus = GPUtil.getGPUs()
+                if gpus:
+                    metrics['gpu_utilization'] = gpus[0].load * 100
+                    metrics['gpu_temperature'] = gpus[0].temperature
+            except Exception as e:
+                logger.debug(f"Failed to get GPU utilization: {e}")
+        else:
+            logger.debug("GPU utilization monitoring disabled (GPUtil not available)")
         
         self.start_time = None
         self.start_memory = None

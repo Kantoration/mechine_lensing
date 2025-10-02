@@ -29,6 +29,9 @@ line_profiler>=4.0.0
 memory_profiler>=0.60.0
 py-spy>=0.3.0
 
+# GPU monitoring and benchmarking (optional)
+GPUtil>=1.4.0
+
 # Data visualization
 seaborn>=0.11.0
 plotly>=5.0.0
