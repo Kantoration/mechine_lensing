@@ -68,8 +68,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     num_samples = 0
     
     for images, labels in train_loader:
-        images = images.to(device)
-        labels = labels.float().to(device)
+        images = images.to(device, non_blocking=device.type == 'cuda')
+        labels = labels.float().to(device, non_blocking=device.type == 'cuda')
         
         optimizer.zero_grad()
         
@@ -102,8 +102,8 @@ def validate(model, val_loader, criterion, device):
     
     with torch.no_grad():
         for images, labels in val_loader:
-            images = images.to(device)
-            labels = labels.float().to(device)
+            images = images.to(device, non_blocking=device.type == 'cuda')
+            labels = labels.float().to(device, non_blocking=device.type == 'cuda')
             
             logits = model(images).squeeze()
             loss = criterion(logits, labels)
@@ -129,8 +129,8 @@ def evaluate(model, test_loader, criterion, device):
     
     with torch.no_grad():
         for images, labels in test_loader:
-            images = images.to(device)
-            labels = labels.float().to(device)
+            images = images.to(device, non_blocking=device.type == 'cuda')
+            labels = labels.float().to(device, non_blocking=device.type == 'cuda')
             
             logits = model(images).squeeze()
             loss = criterion(logits, labels)
@@ -254,7 +254,8 @@ def main():
             batch_size=args.batch_size,
             img_size=args.img_size,
             num_workers=args.num_workers,
-            val_split=args.val_split
+            val_split=args.val_split,
+            pin_memory=device.type == 'cuda'  # Enable pinned memory for GPU
         )
         
         # Setup training
