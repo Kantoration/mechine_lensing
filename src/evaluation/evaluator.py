@@ -46,7 +46,7 @@ from sklearn.metrics import (
 )
 
 from src.datasets.lens_dataset import LensDataset
-from models import build_model, list_available_architectures
+from src.models import build_model, list_available_models
 from calibration.temperature import TemperatureScaler, compute_calibration_metrics
 from metrics.calibration import reliability_diagram
 
@@ -323,7 +323,7 @@ def main():
     parser.add_argument("--weights", type=str, required=True,
                         help="Path to trained model weights")
     parser.add_argument("--arch", type=str, required=True,
-                        choices=list_available_architectures(),
+                        choices=list_available_models(),
                         help="Model architecture")
     
     # Data arguments

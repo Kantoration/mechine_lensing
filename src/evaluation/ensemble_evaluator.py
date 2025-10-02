@@ -40,7 +40,7 @@ from sklearn.metrics import (
 )
 
 from src.datasets.lens_dataset import LensDataset
-from models import build_model, list_available_architectures, get_model_info
+from src.models import build_model, list_available_models, get_model_info
 
 # Setup logging
 logging.basicConfig(

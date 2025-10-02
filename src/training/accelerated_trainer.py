@@ -331,10 +331,11 @@ def main():
                         help="Validation split fraction")
     
     # Model arguments
-    available_archs = list_available_architectures()
+    models_dict = list_available_models()
+    available_archs = models_dict.get('single_models', []) + models_dict.get('physics_models', [])
     try:
-        from src.models.ensemble.registry import list_available_models
-        available_archs.extend(list_available_models())
+        from src.models.ensemble.registry import list_available_models as list_ensemble_models
+        available_archs.extend(list_ensemble_models())
         available_archs = list(dict.fromkeys(available_archs))
     except ImportError:
         pass
