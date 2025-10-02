@@ -59,15 +59,32 @@ class PerformanceMonitor:
         self.memory_usage = []
         self.gpu_memory = []
         
+        # Track samples and batches for proper throughput calculation
+        self.total_samples_processed = 0
+        self.total_batches_processed = 0
+        self.samples_per_epoch = []
+        self.batches_per_epoch = []
+        
     def start_epoch(self):
         """Start timing an epoch."""
         self.start_time = time.time()
         
-    def end_epoch(self):
-        """End timing an epoch and record metrics."""
+    def end_epoch(self, samples_processed: int = 0, batches_processed: int = 0):
+        """End timing an epoch and record metrics.
+        
+        Args:
+            samples_processed: Number of samples processed in this epoch
+            batches_processed: Number of batches processed in this epoch
+        """
         if self.start_time is not None:
             epoch_time = time.time() - self.start_time
             self.epoch_times.append(epoch_time)
+            
+            # Track samples and batches
+            self.total_samples_processed += samples_processed
+            self.total_batches_processed += batches_processed
+            self.samples_per_epoch.append(samples_processed)
+            self.batches_per_epoch.append(batches_processed)
             
             # Record memory usage
             if torch.cuda.is_available():
@@ -77,18 +94,50 @@ class PerformanceMonitor:
             return epoch_time
         return 0.0
     
+    def record_batch(self, batch_size: int):
+        """Record a batch being processed.
+        
+        Args:
+            batch_size: Number of samples in the batch
+        """
+        self.total_samples_processed += batch_size
+        self.total_batches_processed += 1
+    
     def get_stats(self) -> Dict[str, float]:
         """Get performance statistics."""
         stats = {}
         
         if self.epoch_times:
+            total_training_time = sum(self.epoch_times)
+            
             stats['avg_epoch_time'] = np.mean(self.epoch_times)
-            stats['total_training_time'] = sum(self.epoch_times)
-            stats['samples_per_second'] = len(self.epoch_times) / sum(self.epoch_times)
+            stats['total_training_time'] = total_training_time
+            
+            # Calculate proper throughput metrics
+            if total_training_time > 0:
+                if self.total_samples_processed > 0:
+                    stats['samples_per_second'] = self.total_samples_processed / total_training_time
+                else:
+                    # Fallback to epochs per second if no sample count available
+                    stats['samples_per_second'] = len(self.epoch_times) / total_training_time
+                    stats['epochs_per_second'] = len(self.epoch_times) / total_training_time
+                
+                if self.total_batches_processed > 0:
+                    stats['batches_per_second'] = self.total_batches_processed / total_training_time
+            
+            # Additional metrics
+            if self.samples_per_epoch:
+                stats['avg_samples_per_epoch'] = np.mean(self.samples_per_epoch)
+            if self.batches_per_epoch:
+                stats['avg_batches_per_epoch'] = np.mean(self.batches_per_epoch)
         
         if self.gpu_memory:
             stats['peak_gpu_memory_gb'] = max(self.gpu_memory)
             stats['avg_gpu_memory_gb'] = np.mean(self.gpu_memory)
+        
+        # Total counts
+        stats['total_samples_processed'] = self.total_samples_processed
+        stats['total_batches_processed'] = self.total_batches_processed
         
         return stats
 
@@ -182,7 +231,7 @@ def train_epoch_amp(
     device: torch.device,
     use_amp: bool = True,
     gradient_clip_val: float = 1.0
-) -> Tuple[float, float]:
+) -> Tuple[float, float, int, int]:
     """Train for one epoch with mixed precision support."""
     model.train()
     running_loss = 0.0
@@ -241,7 +290,7 @@ def train_epoch_amp(
             logger.debug(f"Batch {batch_idx}/{len(train_loader)}: "
                         f"loss={loss.item():.4f}, acc={acc.item():.3f}")
     
-    return running_loss / num_samples, running_acc / num_samples
+    return running_loss / num_samples, running_acc / num_samples, num_samples, len(train_loader)
 
 
 def validate_amp(
@@ -493,7 +542,7 @@ def main():
             monitor.start_epoch()
             
             # Train and validate
-            train_loss, train_acc = train_epoch_amp(
+            train_loss, train_acc, samples_processed, batches_processed = train_epoch_amp(
                 model, train_loader, criterion, optimizer, scaler, device,
                 use_amp=use_amp, gradient_clip_val=args.gradient_clip
             )
@@ -523,7 +572,7 @@ def main():
                 logger.info(f"New best model saved (val_loss: {val_loss:.4f})")
             
             # Log progress with performance metrics
-            epoch_time = monitor.end_epoch()
+            epoch_time = monitor.end_epoch(samples_processed, batches_processed)
             current_lr = optimizer.param_groups[0]['lr']
             
             logger.info(
