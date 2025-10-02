@@ -33,6 +33,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import psutil
 
+# Initialize logger first so it's available for GPUtil import handling
+logger = logging.getLogger(__name__)
+
 # Optional dependency for GPU monitoring
 try:
     import GPUtil
@@ -41,8 +44,6 @@ except ImportError:
     GPUtil = None
     GPUTIL_AVAILABLE = False
     logger.warning("GPUtil not available. GPU utilization monitoring will be disabled.")
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

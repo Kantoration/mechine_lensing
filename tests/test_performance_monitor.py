@@ -33,15 +33,6 @@ class TestPerformanceMonitor(unittest.TestCase):
         self.assertEqual(len(self.monitor.samples_per_epoch), 0)
         self.assertEqual(len(self.monitor.batches_per_epoch), 0)
     
-    def test_record_batch(self):
-        """Test that record_batch correctly tracks samples and batches."""
-        # Record some batches
-        self.monitor.record_batch(32)  # 32 samples
-        self.monitor.record_batch(16)  # 16 samples
-        self.monitor.record_batch(32)  # 32 samples
-        
-        self.assertEqual(self.monitor.total_samples_processed, 80)
-        self.assertEqual(self.monitor.total_batches_processed, 3)
     
     def test_epoch_with_sample_tracking(self):
         """Test that end_epoch correctly tracks samples and batches."""

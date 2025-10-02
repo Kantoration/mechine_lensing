@@ -94,14 +94,6 @@ class PerformanceMonitor:
             return epoch_time
         return 0.0
     
-    def record_batch(self, batch_size: int):
-        """Record a batch being processed.
-        
-        Args:
-            batch_size: Number of samples in the batch
-        """
-        self.total_samples_processed += batch_size
-        self.total_batches_processed += 1
     
     def get_stats(self) -> Dict[str, float]:
         """Get performance statistics."""

@@ -26,11 +26,12 @@ class TestGPUtilFallback(unittest.TestCase):
             if 'GPUtil' in sys.modules:
                 del sys.modules['GPUtil']
             
-            # This should not raise an ImportError
+            # This should not raise an ImportError or NameError
             try:
-                from src.utils.benchmark import BenchmarkSuite, PerformanceMetrics
+                from src.utils.benchmark import BenchmarkSuite, PerformanceMetrics, GPUTIL_AVAILABLE
+                self.assertFalse(GPUTIL_AVAILABLE, "GPUTIL_AVAILABLE should be False when GPUtil is missing")
                 self.assertTrue(True, "Import succeeded without GPUtil")
-            except ImportError as e:
+            except (ImportError, NameError) as e:
                 self.fail(f"Import failed without GPUtil: {e}")
     
     def test_gputil_availability_flag(self):
@@ -155,6 +156,36 @@ class TestBenchmarkImportStability(unittest.TestCase):
         # Test that GPUTIL_AVAILABLE flag is properly set
         from src.utils.benchmark import GPUTIL_AVAILABLE
         self.assertIsInstance(GPUTIL_AVAILABLE, bool)
+    
+    def test_logger_initialization_order(self):
+        """Test that logger is initialized before GPUtil import handling."""
+        # This test specifically verifies the fix for the logger reference before assignment issue
+        # The key test is that no NameError occurs when importing without GPUtil
+        
+        # Test that import works without crashing due to logger reference before assignment
+        try:
+            # Simulate GPUtil not being available by mocking it
+            with patch.dict('sys.modules', {'GPUtil': None}):
+                # Remove GPUtil from modules if it exists
+                if 'GPUtil' in sys.modules:
+                    del sys.modules['GPUtil']
+                
+                # This should not raise a NameError about logger
+                import importlib
+                if 'src.utils.benchmark' in sys.modules:
+                    # Force reload to test the import logic
+                    importlib.reload(sys.modules['src.utils.benchmark'])
+                else:
+                    from src.utils.benchmark import BenchmarkSuite
+                
+                # If we get here without NameError, the fix worked
+                self.assertTrue(True, "Import succeeded without logger NameError")
+                
+        except NameError as e:
+            if 'logger' in str(e):
+                self.fail(f"Logger NameError still exists: {e}")
+            else:
+                raise  # Re-raise if it's a different NameError
 
 
 if __name__ == '__main__':
