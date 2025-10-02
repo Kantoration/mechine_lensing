@@ -73,7 +73,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         
         optimizer.zero_grad()
         
-        logits = model(images).squeeze(1)
+        logits = model(images).squeeze()
         loss = criterion(logits, labels)
         
         loss.backward()
@@ -105,7 +105,34 @@ def validate(model, val_loader, criterion, device):
             images = images.to(device)
             labels = labels.float().to(device)
             
-            logits = model(images).squeeze(1)
+            logits = model(images).squeeze()
+            loss = criterion(logits, labels)
+            
+            probs = torch.sigmoid(logits)
+            preds = (probs >= 0.5).float()
+            acc = (preds == labels).float().mean()
+            
+            batch_size = images.size(0)
+            running_loss += loss.item() * batch_size
+            running_acc += acc.item() * batch_size
+            num_samples += batch_size
+    
+    return running_loss / num_samples, running_acc / num_samples
+
+
+def evaluate(model, test_loader, criterion, device):
+    """Evaluate the model on test set (mirrors validate but for test data)."""
+    model.eval()
+    running_loss = 0.0
+    running_acc = 0.0
+    num_samples = 0
+    
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.float().to(device)
+            
+            logits = model(images).squeeze()
             loss = criterion(logits, labels)
             
             probs = torch.sigmoid(logits)
@@ -165,6 +192,12 @@ def main():
     parser.add_argument("--weight-decay", type=float, default=1e-4,
                         help="Weight decay")
     
+    # Early stopping arguments
+    parser.add_argument("--patience", type=int, default=10,
+                        help="Number of epochs to wait for improvement before early stopping")
+    parser.add_argument("--min-delta", type=float, default=1e-4,
+                        help="Minimum change in validation loss to qualify as an improvement")
+    
     # Output arguments
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints",
                         help="Checkpoint directory")
@@ -180,7 +213,8 @@ def main():
     data_root = Path(args.data_root)
     if not data_root.exists():
         logger.error(f"Data directory not found: {data_root}")
-        logger.error("Run: python src/make_dataset_scientific.py --out data_scientific_test")
+        logger.error("Run: python scripts/generate_dataset.py --out data_scientific_test")
+        logger.error("Or use the installed console script: lens-generate --out data_scientific_test")
         sys.exit(1)
     
     # Setup device
@@ -235,9 +269,13 @@ def main():
         checkpoint_dir = Path(args.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
+        # Early stopping variables
+        patience_counter = 0
+        early_stopped = False
+        
         history = {"train_losses": [], "val_losses": [], "train_accs": [], "val_accs": []}
         
-        logger.info(f"Starting training for {args.epochs} epochs")
+        logger.info(f"Starting training for {args.epochs} epochs (patience: {args.patience}, min_delta: {args.min_delta})")
         
         for epoch in range(1, args.epochs + 1):
             start_time = time.time()
@@ -255,12 +293,16 @@ def main():
             history["train_accs"].append(train_acc)
             history["val_accs"].append(val_acc)
             
-            # Save best model with architecture-specific name
-            if val_loss < best_val_loss:
+            # Save best model with architecture-specific name and check for early stopping
+            if val_loss < best_val_loss - args.min_delta:
                 best_val_loss = val_loss
+                patience_counter = 0  # Reset patience counter
                 model_filename = f"best_{args.arch}.pt"
                 torch.save(model.state_dict(), checkpoint_dir / model_filename)
                 logger.info(f"New best model saved (val_loss: {val_loss:.4f})")
+            else:
+                patience_counter += 1
+                logger.info(f"No improvement for {patience_counter} epochs (patience: {args.patience})")
             
             # Log progress
             epoch_time = time.time() - start_time
@@ -270,12 +312,35 @@ def main():
                 f"val_loss={val_loss:.4f} val_acc={val_acc:.3f} | "
                 f"time={epoch_time:.1f}s"
             )
+            
+            # Check for early stopping
+            if patience_counter >= args.patience:
+                logger.info(f"Early stopping triggered after {epoch} epochs (patience: {args.patience})")
+                early_stopped = True
+                break
         
-        # Save training history with architecture info
+        # Load best model and evaluate on test set
+        logger.info("Loading best model for final test evaluation...")
+        model_filename = f"best_{args.arch}.pt"
+        model.load_state_dict(torch.load(checkpoint_dir / model_filename))
+        
+        # Evaluate on test set
+        logger.info("Evaluating on test set...")
+        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+        
+        logger.info(f"Final test results: loss={test_loss:.4f}, accuracy={test_acc:.3f}")
+        
+        # Save training history with architecture info and test results
         history_filename = f"training_history_{args.arch}.json"
         history["architecture"] = args.arch
         history["img_size"] = args.img_size
         history["pretrained"] = args.pretrained
+        history["test_loss"] = test_loss
+        history["test_acc"] = test_acc
+        history["early_stopped"] = early_stopped
+        history["final_epoch"] = len(history["train_losses"])
+        history["patience"] = args.patience
+        history["min_delta"] = args.min_delta
         
         with open(checkpoint_dir / history_filename, 'w') as f:
             json.dump(history, f, indent=2)

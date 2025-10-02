@@ -91,7 +91,7 @@ Documentation = "https://github.com/Kantoration/mechine_lensing/wiki"
 lens-train = "src.train:main"
 lens-eval = "src.eval:main"
 lens-ensemble = "src.eval_ensemble:main"
-lens-generate = "src.make_dataset_scientific:main"
+lens-generate = "scripts.generate_dataset:main"
 
 [tool.setuptools_scm]
 write_to = "src/_version.py"

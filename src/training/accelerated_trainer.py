@@ -239,7 +239,7 @@ def train_epoch_amp(
         # Mixed precision forward pass
         if use_amp:
             with autocast():
-                logits = model(images).squeeze(1)
+                logits = model(images).squeeze()
                 loss = criterion(logits, labels)
             
             # Mixed precision backward pass
@@ -254,7 +254,7 @@ def train_epoch_amp(
             scaler.update()
         else:
             # Standard precision
-            logits = model(images).squeeze(1)
+            logits = model(images).squeeze()
             loss = criterion(logits, labels)
             
             loss.backward()
@@ -305,10 +305,49 @@ def validate_amp(
             
             if use_amp:
                 with autocast():
-                    logits = model(images).squeeze(1)
+                    logits = model(images).squeeze()
                     loss = criterion(logits, labels)
             else:
-                logits = model(images).squeeze(1)
+                logits = model(images).squeeze()
+                loss = criterion(logits, labels)
+            
+            probs = torch.sigmoid(logits)
+            probs = clamp_probs(probs)  # Numerical stability
+            preds = (probs >= 0.5).float()
+            acc = (preds == labels).float().mean()
+            
+            batch_size = images.size(0)
+            running_loss += loss.item() * batch_size
+            running_acc += acc.item() * batch_size
+            num_samples += batch_size
+    
+    return running_loss / num_samples, running_acc / num_samples
+
+
+def evaluate_amp(
+    model: nn.Module,
+    test_loader: DataLoader,
+    criterion: nn.Module,
+    device: torch.device,
+    use_amp: bool = True
+) -> Tuple[float, float]:
+    """Evaluate the model on test set with mixed precision support (mirrors validate_amp but for test data)."""
+    model.eval()
+    running_loss = 0.0
+    running_acc = 0.0
+    num_samples = 0
+    
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device, non_blocking=True)
+            labels = labels.float().to(device, non_blocking=True)
+            
+            if use_amp:
+                with autocast():
+                    logits = model(images).squeeze()
+                    loss = criterion(logits, labels)
+            else:
+                logits = model(images).squeeze()
                 loss = criterion(logits, labels)
             
             probs = torch.sigmoid(logits)
@@ -400,6 +439,12 @@ def main():
                         choices=["plateau", "cosine"],
                         help="Learning rate scheduler")
     
+    # Early stopping arguments
+    parser.add_argument("--patience", type=int, default=10,
+                        help="Number of epochs to wait for improvement before early stopping")
+    parser.add_argument("--min-delta", type=float, default=1e-4,
+                        help="Minimum change in validation loss to qualify as an improvement")
+    
     # Performance arguments
     parser.add_argument("--amp", action="store_true",
                         help="Use automatic mixed precision")
@@ -434,7 +479,8 @@ def main():
     data_root = Path(args.data_root)
     if not data_root.exists():
         logger.error(f"Data directory not found: {data_root}")
-        logger.error("Run: python src/make_dataset_scientific.py --out data_scientific_test")
+        logger.error("Run: python scripts/generate_dataset.py --out data_scientific_test")
+        logger.error("Or use the installed console script: lens-generate --out data_scientific_test")
         sys.exit(1)
     
     # Setup device
@@ -526,13 +572,17 @@ def main():
         checkpoint_dir = Path(args.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
+        # Early stopping variables
+        patience_counter = 0
+        early_stopped = False
+        
         history = {
             "train_losses": [], "val_losses": [], 
             "train_accs": [], "val_accs": [],
             "learning_rates": []
         }
         
-        logger.info(f"Starting accelerated training for {args.epochs} epochs")
+        logger.info(f"Starting accelerated training for {args.epochs} epochs (patience: {args.patience}, min_delta: {args.min_delta})")
         logger.info(f"Architecture: {args.arch}, Batch size: {args.batch_size}, "
                    f"AMP: {use_amp}, Cloud: {args.cloud or 'local'}")
         
@@ -562,12 +612,16 @@ def main():
             history["val_accs"].append(val_acc)
             history["learning_rates"].append(optimizer.param_groups[0]['lr'])
             
-            # Save best model
-            if val_loss < best_val_loss:
+            # Save best model and check for early stopping
+            if val_loss < best_val_loss - args.min_delta:
                 best_val_loss = val_loss
+                patience_counter = 0  # Reset patience counter
                 model_filename = f"best_{args.arch}_amp.pt" if use_amp else f"best_{args.arch}.pt"
                 torch.save(model.state_dict(), checkpoint_dir / model_filename)
                 logger.info(f"New best model saved (val_loss: {val_loss:.4f})")
+            else:
+                patience_counter += 1
+                logger.info(f"No improvement for {patience_counter} epochs (patience: {args.patience})")
             
             # Log progress with performance metrics
             epoch_time = monitor.end_epoch(samples_processed, batches_processed)
@@ -579,15 +633,38 @@ def main():
                 f"val_loss={val_loss:.4f} val_acc={val_acc:.3f} | "
                 f"lr={current_lr:.2e} | time={epoch_time:.1f}s"
             )
+            
+            # Check for early stopping
+            if patience_counter >= args.patience:
+                logger.info(f"Early stopping triggered after {epoch} epochs (patience: {args.patience})")
+                early_stopped = True
+                break
         
-        # Save training history with performance stats
+        # Load best model and evaluate on test set
+        logger.info("Loading best model for final test evaluation...")
+        model_filename = f"best_{args.arch}_amp.pt" if use_amp else f"best_{args.arch}.pt"
+        model.load_state_dict(torch.load(checkpoint_dir / model_filename))
+        
+        # Evaluate on test set
+        logger.info("Evaluating on test set...")
+        test_loss, test_acc = evaluate_amp(model, test_loader, criterion, device, use_amp)
+        
+        logger.info(f"Final test results: loss={test_loss:.4f}, accuracy={test_acc:.3f}")
+        
+        # Save training history with performance stats and test results
         history.update({
             "architecture": args.arch,
             "img_size": args.img_size,
             "pretrained": args.pretrained,
             "amp_enabled": use_amp,
             "cloud_platform": args.cloud,
-            "performance": monitor.get_stats()
+            "performance": monitor.get_stats(),
+            "test_loss": test_loss,
+            "test_acc": test_acc,
+            "early_stopped": early_stopped,
+            "final_epoch": len(history["train_losses"]),
+            "patience": args.patience,
+            "min_delta": args.min_delta
         })
         
         history_filename = f"training_history_{args.arch}_amp.json" if use_amp else f"training_history_{args.arch}.json"

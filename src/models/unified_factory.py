@@ -207,11 +207,12 @@ class UnifiedModelFactory:
                 model = nn.Sequential(backbone, head)
             else:
                 # Use ensemble registry for standard models
-                model = make_ensemble_model(
+                backbone, head, feature_dim = make_ensemble_model(
                     name=architecture,
                     pretrained=config.pretrained,
                     dropout_p=config.dropout_p
                 )
+                model = nn.Sequential(backbone, head)
             
             # Apply performance optimizations
             model = self._apply_performance_optimizations(model, config)
