@@ -756,7 +756,9 @@ def main():
                         choices=available_archs,
                         help="Model architecture")
     parser.add_argument("--pretrained", action="store_true", default=True,
-                        help="Use pretrained weights")
+                        help="Use pretrained weights (default: True)")
+    parser.add_argument("--no-pretrained", action="store_false", dest="pretrained",
+                        help="Disable pretrained weights and train from scratch")
     
     # Training arguments
     parser.add_argument("--epochs", type=int, default=20,

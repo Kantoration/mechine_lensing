@@ -387,7 +387,9 @@ def create_base_argument_parser(description: str = "Train lens classifier") -> a
                         choices=available_archs,
                         help="Model architecture")
     parser.add_argument("--pretrained", action="store_true", default=True,
-                        help="Use pretrained weights")
+                        help="Use pretrained weights (default: True)")
+    parser.add_argument("--no-pretrained", action="store_false", dest="pretrained",
+                        help="Disable pretrained weights and train from scratch")
     parser.add_argument("--dropout-rate", type=float, default=0.5,
                         help="Dropout rate")
     
