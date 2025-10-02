@@ -2,13 +2,21 @@
 Training utilities and trainers for gravitational lens classification.
 """
 
-from .trainer import main, set_seed, train_epoch, validate
-from src.datasets.optimized_dataloader import create_dataloaders
-
-__all__ = [
-    'main',
-    'set_seed',
-    'create_dataloaders',
-    'train_epoch',
-    'validate'
-]
+# Import from common module (new architecture)
+try:
+    from .common import BaseTrainer, PerformanceMixin, PerformanceMonitor, create_optimized_dataloaders
+    from .accelerated_trainer_refactored import AcceleratedTrainer
+    from .multi_scale_trainer_refactored import MultiScaleTrainer, ProgressiveMultiScaleTrainer
+    
+    __all__ = [
+        'BaseTrainer',
+        'PerformanceMixin', 
+        'PerformanceMonitor',
+        'create_optimized_dataloaders',
+        'AcceleratedTrainer',
+        'MultiScaleTrainer',
+        'ProgressiveMultiScaleTrainer'
+    ]
+except ImportError:
+    # Fallback to old imports if PyTorch not available
+    __all__ = []
