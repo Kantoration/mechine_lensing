@@ -40,6 +40,7 @@ from torch.utils.data import DataLoader, random_split
 from src.datasets.lens_dataset import LensDataset
 from src.models import create_model, ModelConfig, list_available_models, get_model_info
 from src.models.ensemble.registry import make_model as make_ensemble_model
+from src.utils.benchmark import BenchmarkSuite
 from src.utils.numerical import clamp_probs
 
 # Setup logging
@@ -569,10 +570,37 @@ def main():
         # Performance monitoring
         monitor = PerformanceMonitor()
         
-        # Training loop
-        best_val_loss = float('inf')
+        # Setup checkpoint directory
         checkpoint_dir = Path(args.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Run benchmarks if requested
+        benchmark_metrics = None
+        if args.benchmark:
+            logger.info("Running performance benchmarks...")
+            benchmark_suite = BenchmarkSuite(output_dir=str(checkpoint_dir / "benchmarks"))
+            
+            # Run a short training benchmark (1 epoch)
+            benchmark_metrics = benchmark_suite.benchmark_training(
+                model=model,
+                train_loader=train_loader,
+                criterion=criterion,
+                optimizer=optimizer,
+                num_epochs=1,  # Short benchmark
+                use_amp=use_amp,
+                device=device
+            )
+            
+            logger.info(f"Benchmark results: {benchmark_metrics}")
+            
+            # Save benchmark results
+            benchmark_file = checkpoint_dir / f"benchmark_results_{args.arch}.json"
+            with open(benchmark_file, 'w') as f:
+                json.dump(benchmark_metrics.to_dict(), f, indent=2)
+            logger.info(f"Benchmark results saved to: {benchmark_file}")
+        
+        # Training loop
+        best_val_loss = float('inf')
         
         # Early stopping variables
         patience_counter = 0
@@ -668,6 +696,13 @@ def main():
             "patience": args.patience,
             "min_delta": args.min_delta
         })
+        
+        # Add benchmark metrics if available
+        if benchmark_metrics is not None:
+            history["benchmark_metrics"] = benchmark_metrics.to_dict()
+            history["benchmark_enabled"] = True
+        else:
+            history["benchmark_enabled"] = False
         
         history_filename = f"training_history_{args.arch}_amp.json" if use_amp else f"training_history_{args.arch}.json"
         with open(checkpoint_dir / history_filename, 'w') as f:
