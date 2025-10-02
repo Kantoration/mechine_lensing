@@ -154,6 +154,22 @@ Icon
 *~
 .nfs*
 
+# Temporary test files
+test_*.py
+*_test_temp.py
+temp_*.py
+
+# Refactored/duplicate files
+*_refactored.py
+*_old.py
+*_backup.py
+
+# Empty directories
+experiments/
+benchmarks/
+temp/
+tmp/
+
 
 
 
