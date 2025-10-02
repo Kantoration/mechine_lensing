@@ -37,10 +37,10 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from torch.utils.data import DataLoader, random_split
 
-from datasets.lens_dataset import LensDataset
-from models import build_model, list_available_architectures
-from models.ensemble.registry import make_model as make_ensemble_model
-from utils.numerical import clamp_probs
+from src.datasets.lens_dataset import LensDataset
+from src.models import create_model, list_available_models
+from src.models.ensemble.registry import make_model as make_ensemble_model
+from src.utils.numerical import clamp_probs
 
 # Setup logging
 logging.basicConfig(
@@ -333,7 +333,7 @@ def main():
     # Model arguments
     available_archs = list_available_architectures()
     try:
-        from models.ensemble.registry import list_available_models
+        from src.models.ensemble.registry import list_available_models
         available_archs.extend(list_available_models())
         available_archs = list(dict.fromkeys(available_archs))
     except ImportError:
@@ -422,7 +422,7 @@ def main():
             )
             model = nn.Sequential(backbone, head)
         else:
-            model = build_model(
+            model = create_model(
                 arch=args.arch,
                 pretrained=args.pretrained,
                 dropout_rate=args.dropout_rate

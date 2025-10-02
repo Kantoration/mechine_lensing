@@ -13,7 +13,8 @@ from .lens_classifier import LensClassifier
 from .unified_factory import (
     ModelConfig, UnifiedModelFactory,
     create_model, create_model_from_config_file,
-    list_available_models, get_model_info
+    list_available_models, get_model_info,
+    build_model  # Backward compatibility
 )
 from .ensemble import (
     make_model, get_model_info as get_ensemble_model_info, list_available_models as list_ensemble_models,
@@ -28,6 +29,7 @@ __all__ = [
     'create_model_from_config_file',
     'list_available_models',
     'get_model_info',
+    'build_model',  # Backward compatibility
     
     # Legacy compatibility (removed deprecated factory) 
     'LensClassifier',

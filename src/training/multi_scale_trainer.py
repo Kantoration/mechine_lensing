@@ -31,12 +31,12 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms as T
 
-from datasets.lens_dataset import LensDataset
-from datasets.optimized_dataloader import create_dataloaders
-from models import create_model, ModelConfig, list_available_models
-from models.ensemble.registry import make_model as make_ensemble_model
-from utils.benchmark import BenchmarkSuite, PerformanceMetrics
-from utils.numerical import clamp_probs
+from src.datasets.lens_dataset import LensDataset
+from src.datasets.optimized_dataloader import create_dataloaders
+from src.models import create_model, ModelConfig, list_available_models
+from src.models.ensemble.registry import make_model as make_ensemble_model
+from src.utils.benchmark import BenchmarkSuite, PerformanceMetrics
+from src.utils.numerical import clamp_probs
 
 # Setup logging
 logging.basicConfig(

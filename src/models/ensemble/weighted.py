@@ -183,7 +183,7 @@ class UncertaintyWeightedEnsemble(nn.Module):
         vars_tensor = torch.stack(member_vars, dim=0)      # [num_members, batch_size] - LOGIT VARIANCES
         
         # Use our numerical stability utilities for proper fusion
-        from utils.numerical import ensemble_logit_fusion
+        from src.utils.numerical import ensemble_logit_fusion
         
         # Perform logit-space fusion with numerical stability
         ensemble_logits, ensemble_var = ensemble_logit_fusion(
@@ -195,7 +195,7 @@ class UncertaintyWeightedEnsemble(nn.Module):
         ensemble_pred = torch.sigmoid(ensemble_logits)
         
         # Compute weights for logging (from the fusion function)
-        from utils.numerical import inverse_variance_weights
+        from src.utils.numerical import inverse_variance_weights
         weights = inverse_variance_weights(vars_tensor)
         avg_weights = weights.mean(dim=1)  # [num_members]
         

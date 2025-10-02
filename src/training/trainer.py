@@ -32,8 +32,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from datasets.optimized_dataloader import create_dataloaders
-from models import create_model, ModelConfig, list_available_models
+from src.datasets.optimized_dataloader import create_dataloaders
+from src.models import create_model, ModelConfig, list_available_models
 from torch.utils.data import DataLoader, random_split
 
 # Setup logging
@@ -140,7 +140,7 @@ def main():
     # Get available architectures from both factories
     available_archs = list_available_architectures()
     try:
-        from models.ensemble.registry import list_available_models
+        from src.models.ensemble.registry import list_available_models
         available_archs.extend(list_available_models())
         # Remove duplicates while preserving order
         available_archs = list(dict.fromkeys(available_archs))
@@ -204,7 +204,7 @@ def main():
         # Auto-detect image size if not specified
         if args.img_size is None:
             # Get image size from model info
-            from models import get_model_info
+            from src.models import get_model_info
             model_info = get_model_info(args.arch)
             args.img_size = model_info.get('input_size', 224)
             logger.info(f"Auto-detected image size for {args.arch}: {args.img_size}")

@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 # Import numerical stability utilities
-from utils.numerical import clamp_variances, inverse_variance_weights
+from src.utils.numerical import clamp_variances, inverse_variance_weights
 import torch.nn.functional as F
 
 from .registry import make_model, get_model_info

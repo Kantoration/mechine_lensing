@@ -36,12 +36,12 @@ import asyncio
 from queue import Queue
 import multiprocessing as mp
 
-from datasets.lens_dataset import LensDataset
-from datasets.optimized_dataloader import create_dataloaders
-from models.ensemble.registry import make_model as make_ensemble_model
-from models.ensemble.weighted import UncertaintyWeightedEnsemble
-from models.ensemble.enhanced_weighted import EnhancedUncertaintyEnsemble
-from utils.numerical import clamp_probs, ensemble_logit_fusion
+from src.datasets.lens_dataset import LensDataset
+from src.datasets.optimized_dataloader import create_dataloaders
+from src.models.ensemble.registry import make_model as make_ensemble_model
+from src.models.ensemble.weighted import UncertaintyWeightedEnsemble
+from src.models.ensemble.enhanced_weighted import EnhancedUncertaintyEnsemble
+from src.utils.numerical import clamp_probs, ensemble_logit_fusion
 
 # Setup logging
 logging.basicConfig(
@@ -519,7 +519,7 @@ def main():
             )
             model = nn.Sequential(backbone, head)
         else:
-            from models import build_model
+            from src.models import build_model
             model = build_model(arch=name, pretrained=True, dropout_rate=0.5)
         
         # Load weights

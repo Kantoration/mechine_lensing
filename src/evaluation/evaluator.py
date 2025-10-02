@@ -45,7 +45,7 @@ from sklearn.metrics import (
     confusion_matrix, classification_report
 )
 
-from datasets.lens_dataset import LensDataset
+from src.datasets.lens_dataset import LensDataset
 from models import build_model, list_available_architectures
 from calibration.temperature import TemperatureScaler, compute_calibration_metrics
 from metrics.calibration import reliability_diagram

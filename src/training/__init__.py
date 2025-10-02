@@ -3,7 +3,7 @@ Training utilities and trainers for gravitational lens classification.
 """
 
 from .trainer import main, set_seed, train_epoch, validate
-from datasets.optimized_dataloader import create_dataloaders
+from src.datasets.optimized_dataloader import create_dataloaders
 
 __all__ = [
     'main',
