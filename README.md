@@ -1234,6 +1234,35 @@ These advanced models enable:
 
 *For detailed implementation guides and model-specific documentation, see the [Advanced Models Integration Guide](docs/ADVANCED_MODELS_INTEGRATION.md) (coming soon).*
 
+### 📘 **Complete Integration Implementation Plan**
+
+A comprehensive implementation plan for integrating real astronomical datasets and advanced model architectures is available:
+
+**📄 [Integration Implementation Plan](docs/INTEGRATION_IMPLEMENTATION_PLAN.md)**
+
+This document provides:
+- **Dataset Integration Specifications**: GalaxiesML, Galaxy Zoo, CASTLES format details
+- **Model Registry Extensions**: Complete specifications for all 6 new model types
+- **Data Pipeline Architecture**: FITS→HDF5→WebDataset conversion pipeline
+- **Enhanced Lightning Modules**: Metadata conditioning and physics constraints
+- **Dataset Conversion Scripts**: Ready-to-use converters for real data
+- **Configuration Templates**: YAML configs for each new model type
+- **Testing & Validation Plan**: Unit and integration test specifications
+- **Implementation Timeline**: Phased 4-week rollout plan
+- **Quick Start Commands**: Immediate actionable steps
+
+**Key Components:**
+```bash
+# Convert real datasets
+python scripts/convert_real_datasets.py --dataset galaxiesml --input data/raw/...
+
+# Train advanced models
+python src/lit_train.py --config configs/enhanced_vit.yaml
+
+# Create physics-informed ensemble
+python src/lit_train.py --config configs/pinn_lens.yaml
+```
+
 ## 🛠️ Configuration
 
 ### Environment Variables
