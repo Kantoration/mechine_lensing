@@ -813,7 +813,13 @@ mechine_lensing/
 │   ├── 🔬 trans_enc_s.yaml          # Light Transformer configuration
 │   ├── ⚡ lightning_train.yaml      # Lightning AI local training config
 │   ├── ⚡ lightning_cloud.yaml      # Lightning AI cloud training config
-│   └── ⚡ lightning_ensemble.yaml   # Lightning AI ensemble config
+│   ├── ⚡ lightning_ensemble.yaml   # Lightning AI ensemble config
+│   ├── 🧠 enhanced_vit.yaml         # Enhanced Vision Transformer config
+│   ├── 🛡️ robust_resnet.yaml        # Adversarially trained ResNet config
+│   ├── 🔬 pinn_lens.yaml            # Physics-informed neural network config
+│   ├── 🎛️ film_conditioned.yaml     # FiLM conditioning configuration
+│   ├── 🕸️ gat_lens.yaml             # Graph Attention Network config
+│   └── 📊 bayesian_ensemble.yaml    # Bayesian model ensemble config
 ├── 📁 src/                           # Source code
 │   ├── 📁 analysis/                  # Post-hoc uncertainty analysis
 │   │   └── aleatoric.py              # Active learning & diagnostics
@@ -854,7 +860,8 @@ mechine_lensing/
 │   ├── 📖 SCIENTIFIC_METHODOLOGY.md  # Scientific approach explanation
 │   ├── 🔧 TECHNICAL_DETAILS.md       # Technical implementation details
 │   ├── 🚀 DEPLOYMENT_GUIDE.md        # Cloud deployment guide
-│   └── ⚡ LIGHTNING_INTEGRATION_GUIDE.md # Lightning AI integration guide
+│   ├── ⚡ LIGHTNING_INTEGRATION_GUIDE.md # Lightning AI integration guide
+│   └── 🚀 ADVANCED_MODELS_INTEGRATION_GUIDE.md # Future ensemble model integration
 ├── 📋 requirements.txt               # Production dependencies
 ├── 📋 requirements-dev.txt           # Development dependencies
 ├── 🔧 Makefile                       # Development commands
@@ -906,6 +913,16 @@ make lit-train-cloud     # Train on Lightning Cloud
 make lit-train-ensemble  # Train ensemble with Lightning
 make lit-prepare-dataset # Prepare dataset for cloud streaming
 make lit-upload-dataset  # Upload dataset to cloud storage
+```
+
+### Advanced Model Training (Future)
+```bash
+make lit-train ARCH=enhanced_vit      # Enhanced Vision Transformer
+make lit-train ARCH=robust_resnet     # Adversarially trained ResNet
+make lit-train ARCH=pinn_lens         # Physics-informed neural network
+make lit-train ARCH=film_conditioned  # FiLM-conditioned network
+make lit-train ARCH=gat_lens          # Graph Attention Network
+make lit-train ARCH=bayesian_ensemble # Bayesian model ensemble
 ```
 
 ### Complete Workflows
@@ -1072,6 +1089,151 @@ This project can leverage several real astronomical datasets when using Lightnin
 - **Roboflow Universe**: [Astronomy datasets](https://universe.roboflow.com/search?q=class%3Aastronomy)
 - **HuggingFace**: [Galaxy Zoo datasets](https://github.com/mwalmsley/galaxy-datasets)
 
+## 🚀 Future Ensemble Models: Advanced Architecture Integration
+
+*This section outlines additional state-of-the-art models that can be seamlessly integrated into the ensemble framework for enhanced gravitational lensing detection capabilities.*
+
+### 🧠 Advanced Model Architectures
+
+The current ensemble (ResNet-18/34, ViT-B/16, Enhanced Light Transformer) can be extended with these cutting-edge architectures:
+
+#### 1. **Vision Transformers (ViTs) - Enhanced Variants**
+- **Description**: Advanced ViT architectures with improved attention mechanisms for astronomical images
+- **Strengths**: Long-range dependency modeling, excellent for high-resolution lens detection
+- **Integration**: Feature fusion with existing models via learnable fusion layers
+- **Lightning AI Ready**: ✅ Scales efficiently on cloud GPUs
+
+#### 2. **Robust ResNets (Adversarially Trained)**
+- **Description**: MadryLab-style ResNets trained for robustness against noise and artifacts
+- **Strengths**: High accuracy, robust to observational artifacts and background variations
+- **Integration**: Baseline CNN classifier in ensemble with voting/stacking
+- **Lightning AI Ready**: ✅ Highly optimized for GPU training
+
+#### 3. **Physics-Informed Neural Networks (PINNs)**
+- **Description**: Neural networks that integrate gravitational lensing equations directly into the loss function
+- **Strengths**: Enforces physical plausibility, reduces false positives, provides uncertainty estimates
+- **Integration**: Parallel scoring system with physics consistency checks
+- **Lightning AI Ready**: ✅ Compatible with differentiable lensing simulators
+
+#### 4. **FiLM-Conditioned Networks**
+- **Description**: Feature-wise Linear Modulation for conditioning on metadata (redshift, seeing conditions)
+- **Strengths**: Adapts to varying observing conditions and instrument parameters
+- **Integration**: FiLM layers in backbone architectures with metadata conditioning
+- **Lightning AI Ready**: ✅ Easy to implement with existing frameworks
+
+#### 5. **Graph Attention Networks (GATs)**
+- **Description**: Models relationships between objects (galaxy groups, lens systems) within fields
+- **Strengths**: Spatial reasoning, effective for complex multi-object lens systems
+- **Integration**: Node-feature fusion with image-level predictions
+- **Lightning AI Ready**: ✅ Requires graph preprocessing pipeline
+
+#### 6. **Bayesian Neural Networks**
+- **Description**: Probabilistic models providing uncertainty quantification for rare events
+- **Strengths**: Confidence intervals, essential for scientific follow-up
+- **Integration**: Bayesian model averaging with uncertainty-weighted fusion
+- **Lightning AI Ready**: ✅ Computationally intensive but feasible on cloud
+
+### 🏗️ Ensemble Integration Framework
+
+#### **Seamless Integration Strategy**
+
+```python
+# Future ensemble architecture (conceptual)
+class AdvancedEnsemble(nn.Module):
+    """Extensible ensemble framework for multiple model types."""
+    
+    def __init__(self, models: Dict[str, nn.Module], fusion_strategy: str = "learned"):
+        super().__init__()
+        self.models = models
+        self.fusion_strategy = fusion_strategy
+        
+        # Learnable fusion layer for combining predictions
+        if fusion_strategy == "learned":
+            self.fusion_layer = nn.Linear(len(models), 1)
+        elif fusion_strategy == "uncertainty_weighted":
+            self.uncertainty_estimator = UncertaintyEstimator()
+    
+    def forward(self, x: torch.Tensor, metadata: Optional[Dict] = None):
+        """Forward pass with optional metadata conditioning."""
+        predictions = {}
+        uncertainties = {}
+        
+        for name, model in self.models.items():
+            if hasattr(model, 'forward_with_uncertainty'):
+                pred, unc = model.forward_with_uncertainty(x, metadata)
+                predictions[name] = pred
+                uncertainties[name] = unc
+            else:
+                predictions[name] = model(x, metadata)
+        
+        return self.fuse_predictions(predictions, uncertainties)
+```
+
+#### **Model Characteristics Summary**
+
+| **Model Type** | **Strengths** | **Integration Method** | **Lightning AI Ready** |
+|----------------|---------------|----------------------|----------------------|
+| **Enhanced ViT** | Long-range dependencies | Feature fusion, stacking | ✅ Scales well on GPU/cloud |
+| **Robust ResNet** | Noise/artifact robustness | Voting, stacking | ✅ Highly optimized |
+| **PINN/Differentiable Lens** | Physics enforcement | Parallel scoring, rejection | ✅ Compatible with simulators |
+| **FiLM-Conditioned** | Metadata adaptation | Feature modulation | ✅ Easy implementation |
+| **Graph Attention (GAT)** | Object relations | Node-feature fusion | ✅ Requires preprocessing |
+| **Bayesian Neural Net** | Uncertainty quantification | Model averaging | ✅ Computationally intensive |
+
+### 🔧 Implementation Roadmap
+
+#### **Phase 1: Enhanced Vision Transformers**
+```bash
+# Future implementation
+make lit-train ARCH=enhanced_vit EPOCHS=30
+make lit-train ARCH=robust_resnet EPOCHS=25
+```
+
+#### **Phase 2: Physics-Informed Models**
+```bash
+# Physics-informed training
+make lit-train ARCH=pinn_lens EPOCHS=20 --physics-constraints
+make lit-train ARCH=film_conditioned EPOCHS=25 --metadata-conditioning
+```
+
+#### **Phase 3: Advanced Ensemble**
+```bash
+# Multi-model ensemble training
+make lit-train-advanced-ensemble --models="vit,resnet,pinn,gat,bayesian"
+```
+
+### 🎯 Integration Benefits
+
+- **Heterogeneous Ensemble**: Combines unique strengths of each model family
+- **Scalable Architecture**: All models compatible with Lightning AI infrastructure
+- **Physics-Informed**: Reduces false positives through physical constraints
+- **Uncertainty-Aware**: Provides confidence estimates for scientific follow-up
+- **Metadata-Conditioned**: Adapts to varying observing conditions
+- **Future-Proof**: Extensible framework for new model architectures
+
+### 📋 Configuration Files for Future Models
+
+The project structure already includes placeholder configurations for advanced models:
+
+- **`configs/enhanced_vit.yaml`**: Enhanced Vision Transformer configuration
+- **`configs/robust_resnet.yaml`**: Adversarially trained ResNet settings
+- **`configs/pinn_lens.yaml`**: Physics-informed neural network parameters
+- **`configs/film_conditioned.yaml`**: FiLM conditioning configuration
+- **`configs/gat_lens.yaml`**: Graph Attention Network settings
+- **`configs/bayesian_ensemble.yaml`**: Bayesian model ensemble configuration
+
+### 🔮 Research Applications
+
+These advanced models enable:
+
+- **Multi-Scale Analysis**: From galaxy-scale to cluster-scale lensing
+- **Multi-Wavelength Studies**: Cross-band consistency validation
+- **Survey-Specific Adaptation**: Customized models for Euclid, LSST, JWST
+- **Active Learning**: Intelligent sample selection for human review
+- **Real-Time Processing**: Stream processing for live survey data
+
+*For detailed implementation guides and model-specific documentation, see the [Advanced Models Integration Guide](docs/ADVANCED_MODELS_INTEGRATION.md) (coming soon).*
+
 ## 🛠️ Configuration
 
 ### Environment Variables
@@ -1153,6 +1315,7 @@ make test
 - [📖 Scientific Methodology](docs/SCIENTIFIC_METHODOLOGY.md) - Detailed explanation of our approach
 - [🔧 Technical Details](docs/TECHNICAL_DETAILS.md) - Implementation specifics
 - [⚡ Lightning Integration Guide](docs/LIGHTNING_INTEGRATION_GUIDE.md) - Lightning AI integration and cloud training
+- [🚀 Advanced Models Integration Guide](docs/ADVANCED_MODELS_INTEGRATION_GUIDE.md) - Future ensemble model integration
 - [🚀 Deployment Guide](docs/DEPLOYMENT_GUIDE.md) - Cloud deployment instructions
 - [🤝 Contributing](CONTRIBUTING.md) - Contribution guidelines
 
