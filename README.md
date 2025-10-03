@@ -1057,24 +1057,40 @@ For detailed Lightning AI integration guide, see [Lightning Integration Guide](d
 
 ## 📊 Key Datasets for Lightning AI Training
 
+### ⚠️ **CRITICAL: Dataset Usage Clarification**
+
+**GalaxiesML IS NOT A LENS DATASET**
+- Contains 286,401 galaxy images with spectroscopic redshifts and morphology parameters
+- **NO lens/non-lens labels are provided**
+- **Recommended usage**: Pretraining (self-supervised or auxiliary tasks like morphology/redshift regression)
+- **For lens finding**: Use Bologna Challenge simulations, CASTLES (confirmed lenses), and curated hard negatives
+
+**CASTLES IS POSITIVE-ONLY**
+- All entries are confirmed gravitational lens systems
+- Must be paired with hard negatives (non-lensed cluster cores from RELICS, matched galaxies) for proper training and calibration
+
+---
+
 This project can leverage several real astronomical datasets when using Lightning AI for cloud training and storage:
 
-### 🌌 Galaxy Classification Datasets
+### 🌌 Galaxy Classification Datasets (For Pretraining & Auxiliary Tasks)
 
-| **Dataset** | **Size** | **Content** | **Best For** | **Access** |
-|-------------|----------|-------------|--------------|------------|
-| **GalaxiesML** | 286K images | HSC galaxies with redshifts & morphology | Galaxy classification, redshift estimation | [Zenodo](https://zenodo.org/records/13878122), [UCLA DataLab](https://datalab.astro.ucla.edu/galaxiesml.html) |
+| **Dataset** | **Size** | **Content** | **Usage** | **Access** |
+|-------------|----------|-------------|-----------|------------|
+| **GalaxiesML** | 286K images | HSC galaxies with redshifts & morphology | **PRETRAINING ONLY** (morphology, redshift regression) | [Zenodo](https://zenodo.org/records/13878122), [UCLA DataLab](https://datalab.astro.ucla.edu/galaxiesml.html) |
 | **Galaxy Zoo** | 900K+ images | Citizen-science classified galaxies | Morphology classification | [Galaxy Zoo](https://data.galaxyzoo.org) |
 | **Galaxy10 SDSS** | 21K images | 10 galaxy types (69×69 pixels) | Quick morphology training | [astroNN docs](https://astronn.readthedocs.io/en/latest/galaxy10sdss.html) |
 
 ### 🔭 Gravitational Lensing Datasets
 
-| **Dataset** | **Type** | **Content** | **Best For** | **Access** |
-|-------------|----------|-------------|--------------|------------|
-| **CASTLES** | Real lenses | 100+ confirmed lens systems (FITS) | Lens detection & modeling | [CASTLES Database](https://lweb.cfa.harvard.edu/castles/) |
-| **lenscat** | Community catalog | Curated lens catalog with probabilities | Training/validation for lens finding | [arXiv paper](https://arxiv.org/abs/2406.04398) |
-| **deeplenstronomy** | Simulated | Realistic lens simulations | Training augmentation | [GitHub](https://github.com/deepskies/deeplenstronomy) |
-| **paltas** | Simulated | HST-quality lens images | Simulation-based inference | [GitHub](https://github.com/swagnercarena/paltas) |
+| **Dataset** | **Type** | **Content** | **Label Type** | **Usage** | **Access** |
+|-------------|----------|-------------|----------------|-----------|------------|
+| **Bologna Challenge** | Simulated | Lens simulations with labels | **Full labels** | Primary training | [Bologna Challenge](https://github.com/CosmoStatGW/BolognaChallenge) |
+| **CASTLES** | Real lenses | 100+ confirmed lens systems (FITS) | **Positive only** | Fine-tuning (with hard negatives) | [CASTLES Database](https://lweb.cfa.harvard.edu/castles/) |
+| **RELICS** | Real clusters | Cluster cores | **Build negatives** | Hard negative mining | [RELICS Survey](https://relics.stsci.edu/) |
+| **lenscat** | Community catalog | Curated lens catalog with probabilities | **Mixed confidence** | Validation set | [arXiv paper](https://arxiv.org/abs/2406.04398) |
+| **deeplenstronomy** | Simulated | Realistic lens simulations | **Full labels** | Training augmentation | [GitHub](https://github.com/deepskies/deeplenstronomy) |
+| **paltas** | Simulated | HST-quality lens images | **Full labels** | Simulation-based inference | [GitHub](https://github.com/swagnercarena/paltas) |
 
 ### 🚀 Lightning AI Integration Benefits
 
