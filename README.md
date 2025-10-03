@@ -1611,6 +1611,40 @@ make lit-train-cloud TRAIN_URLS="s3://bucket/train-{0000..0099}.tar" DEVICES=4
 
 For detailed Lightning AI integration guide, see [Lightning Integration Guide](docs/LIGHTNING_INTEGRATION_GUIDE.md).
 
+## 📊 Key Datasets for Lightning AI Training
+
+This project can leverage several real astronomical datasets when using Lightning AI for cloud training and storage:
+
+### 🌌 Galaxy Classification Datasets
+
+| **Dataset** | **Size** | **Content** | **Best For** | **Access** |
+|-------------|----------|-------------|--------------|------------|
+| **GalaxiesML** | 286K images | HSC galaxies with redshifts & morphology | Galaxy classification, redshift estimation | [Zenodo](https://zenodo.org/records/13878122), [UCLA DataLab](https://datalab.astro.ucla.edu/galaxiesml.html) |
+| **Galaxy Zoo** | 900K+ images | Citizen-science classified galaxies | Morphology classification | [Galaxy Zoo](https://data.galaxyzoo.org) |
+| **Galaxy10 SDSS** | 21K images | 10 galaxy types (69×69 pixels) | Quick morphology training | [astroNN docs](https://astronn.readthedocs.io/en/latest/galaxy10sdss.html) |
+
+### 🔭 Gravitational Lensing Datasets
+
+| **Dataset** | **Type** | **Content** | **Best For** | **Access** |
+|-------------|----------|-------------|--------------|------------|
+| **CASTLES** | Real lenses | 100+ confirmed lens systems (FITS) | Lens detection & modeling | [CASTLES Database](https://lweb.cfa.harvard.edu/castles/) |
+| **lenscat** | Community catalog | Curated lens catalog with probabilities | Training/validation for lens finding | [arXiv paper](https://arxiv.org/abs/2406.04398) |
+| **deeplenstronomy** | Simulated | Realistic lens simulations | Training augmentation | [GitHub](https://github.com/deepskies/deeplenstronomy) |
+| **paltas** | Simulated | HST-quality lens images | Simulation-based inference | [GitHub](https://github.com/swagnercarena/paltas) |
+
+### 🚀 Lightning AI Integration Benefits
+
+- **Cloud Storage**: Upload large datasets (HDF5, FITS) to Lightning AI storage for efficient streaming
+- **WebDataset Streaming**: Process massive datasets without local storage constraints
+- **Multi-GPU Scaling**: Train on large datasets across multiple cloud GPUs
+- **Real + Simulated**: Combine real observations with simulated data for robust training
+
+### 📚 Additional Resources
+
+- **Kaggle Astronomy**: [SpaceNet](https://www.kaggle.com/datasets/razaimam45/spacenet-an-optimally-distributed-astronomy-data), [SDSS Stellar Classification](https://www.kaggle.com/datasets/fedesoriano/stellar-classification-dataset-sdss17)
+- **Roboflow Universe**: [Astronomy datasets](https://universe.roboflow.com/search?q=class%3Aastronomy)
+- **HuggingFace**: [Galaxy Zoo datasets](https://github.com/mwalmsley/galaxy-datasets)
+
 ## 🛠️ Configuration
 
 ### Environment Variables
