@@ -1375,32 +1375,114 @@ python scripts/convert_real_datasets.py \
 
 | Component | Priority | Status | Implementation |
 |-----------|----------|--------|----------------|
+| **Bologna Challenge Metrics** | P0 | ✅ **Complete** | TPR@FPR=0, TPR@FPR=0.1, flux-ratio FNR tracking |
 | **Memory-Efficient Ensemble** | P1 | 🔄 In Progress | Sequential training with model cycling |
-| **Soft-Gated Physics Loss** | P1 | 📋 Planned | Replace hard threshold with sigmoid |
+| **Soft-Gated Physics Loss** | P1 | 🔄 Design Ready | Replace hard threshold with sigmoid |
 | **Batched Simulator** | P1 | 📋 Planned | `render_batch()` with invariant caching |
 | **Adaptive Batch Sizing** | P1 | 📋 Planned | Binary search for optimal batch size |
 | **Enhanced Lightning Module** | P1 | 📋 Planned | Metadata conditioning + physics constraints |
 
 **Deliverables**:
-- Memory-efficient ensemble class
-- Physics-informed loss with curriculum weighting
-- Adaptive batch size callback
-- Enhanced Lightning module with metadata support
+- ✅ **Bologna metrics module** (`src/metrics/bologna_metrics.py`)
+- 🔄 Memory-efficient ensemble class (design ready)
+- 🔄 Physics-informed loss with curriculum weighting (spec complete)
+- 📋 Adaptive batch size callback
+- 📋 Enhanced Lightning module with metadata support
 
 **Commands**:
 ```bash
+# Evaluate with Bologna metrics (READY NOW)
+python -c "
+from src.metrics.bologna_metrics import compute_bologna_metrics, format_bologna_metrics
+import numpy as np
+metrics = compute_bologna_metrics(y_true, y_probs, flux_ratios)
+print(format_bologna_metrics(metrics))
+"
+
 # Train single model with metadata
 python src/lit_train.py \
     --config configs/enhanced_vit.yaml \
     --trainer.devices=2 \
     --trainer.max_epochs=50
 
-# Train physics-informed model
+# Train physics-informed model (when enhanced)
 python src/lit_train.py \
     --config configs/pinn_lens.yaml \
     --trainer.devices=4 \
-    --trainer.max_epochs=60
+    --trainer.max_epochs=60 \
+    --model.physics_weight=0.2 \
+    --model.physics_warmup_epochs=10
 ```
+
+#### **Bologna Metrics Implementation Details** ✅
+
+**File**: `src/metrics/bologna_metrics.py` (350+ lines, production-ready)
+
+**Key Functions**:
+```python
+# Primary Bologna Challenge metric
+compute_tpr_at_fpr(y_true, y_probs, fpr_threshold=0.0)
+# Returns: (tpr, threshold) at specified FPR
+
+# Flux-ratio stratified analysis
+compute_flux_ratio_stratified_metrics(y_true, y_probs, flux_ratios, threshold)
+# Returns: {'low': {...}, 'medium': {...}, 'high': {...}}
+
+# Complete evaluation suite
+compute_bologna_metrics(y_true, y_probs, flux_ratios=None)
+# Returns: All Bologna metrics including TPR@FPR=0, TPR@FPR=0.1, AUPRC
+
+# Formatted output
+format_bologna_metrics(metrics)
+# Returns: Readable string with all metrics
+```
+
+**Usage Example**:
+```python
+from src.metrics.bologna_metrics import compute_bologna_metrics
+
+# Evaluate your model
+metrics = compute_bologna_metrics(
+    y_true=test_labels,
+    y_probs=model_predictions,
+    flux_ratios=test_flux_ratios  # Optional
+)
+
+# Check critical metrics
+print(f"TPR@FPR=0: {metrics['tpr_at_fpr_0']:.3f}")
+print(f"TPR@FPR=0.1: {metrics['tpr_at_fpr_0.1']:.3f}")
+
+# Flux-ratio specific (if provided)
+if 'low_flux_fnr' in metrics:
+    print(f"Low flux-ratio FNR: {metrics['low_flux_fnr']:.3f}")
+    if metrics['low_flux_fnr'] > 0.3:
+        print("⚠️ High FNR on challenging low-flux systems!")
+```
+
+**Integration with Training**:
+```python
+# Add to validation loop
+def validation_epoch_end(self, outputs):
+    all_probs = torch.cat([x['probs'] for x in outputs])
+    all_targets = torch.cat([x['targets'] for x in outputs])
+    
+    # Compute Bologna metrics
+    from src.metrics.bologna_metrics import compute_bologna_metrics_torch
+    bologna_metrics = compute_bologna_metrics_torch(all_targets, all_probs)
+    
+    # Log metrics
+    self.log("val/tpr@fpr=0", bologna_metrics['tpr_at_fpr_0'])
+    self.log("val/tpr@fpr=0.1", bologna_metrics['tpr_at_fpr_0.1'])
+    self.log("val/auprc", bologna_metrics['auprc'])
+```
+
+**Features**:
+- ✅ Industry-standard Bologna Challenge metrics
+- ✅ Flux-ratio stratified analysis (low <0.1, medium 0.1-0.3, high >0.3)
+- ✅ Automatic warnings for high FNR on low flux-ratio lenses
+- ✅ PyTorch-friendly wrappers for training integration
+- ✅ Comprehensive documentation and examples
+- ✅ Error handling for edge cases
 
 ---
 
@@ -1408,16 +1490,100 @@ python src/lit_train.py \
 
 | Component | Priority | Status | Implementation |
 |-----------|----------|--------|----------------|
-| **Bologna Metrics** | P2 | 📋 Planned | TPR@FPR=0, TPR@FPR=0.1, flux-ratio FNR |
-| **Extended Stratification** | P2 | 📋 Planned | 7-factor splits (z, mag, seeing, PSF, pixel scale, survey, label) |
+| **Extended Stratification** | P2 | 🔄 Spec Complete | 7-factor splits (z, mag, seeing, PSF, pixel scale, survey, label) |
 | **FiLM Conditioning** | P2 | 📋 Planned | Metadata integration in conv layers |
 | **Cross-Survey Validation** | P2 | 📋 Planned | Test on HSC/SDSS/HST samples |
+| **Bologna Metrics Integration** | P2 | 📋 Planned | Add to training/validation loops |
 
 **Deliverables**:
-- `BolognaMetrics` Lightning module
-- Stratified split function with 7 factors
-- FiLM-conditioned backbone
-- Cross-survey validation harness
+- 🔄 Stratified split function with 7 factors (specification complete)
+- 📋 FiLM-conditioned backbone
+- 📋 Cross-survey validation harness
+- 📋 Bologna metrics integration in Lightning training loop
+
+#### **Extended Stratification Specification** 🔄
+
+**Recommended Implementation**:
+```python
+def create_stratified_splits_v2(
+    metadata_df: pd.DataFrame,
+    factors: List[str] = ['redshift', 'magnitude', 'seeing', 'psf_fwhm', 
+                          'pixel_scale', 'survey', 'label'],
+    train_size: float = 0.7,
+    val_size: float = 0.15,
+    test_size: float = 0.15
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Create 7-factor stratified splits for robust validation.
+    
+    Ensures balanced representation across:
+    - Redshift bins (5 bins: 0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8+)
+    - Magnitude bins (5 bins based on quantiles)
+    - Seeing bins (3 bins: good <0.8", median 0.8-1.2", poor >1.2")
+    - PSF FWHM bins (3 bins: sharp <0.6", medium 0.6-1.0", broad >1.0")
+    - Pixel scale bins (3 bins: fine <0.1"/px, medium 0.1-0.3", coarse >0.3")
+    - Survey (categorical: HSC, SDSS, HST, DES, KIDS, etc.)
+    - Label (binary: lens/non-lens)
+    """
+    from sklearn.model_selection import train_test_split
+    
+    # Build composite stratification key
+    strat_components = []
+    
+    for factor in factors:
+        if factor == 'redshift':
+            bins = pd.qcut(metadata_df[factor].fillna(0.5), q=5, 
+                          labels=False, duplicates='drop')
+        elif factor == 'magnitude':
+            bins = pd.qcut(metadata_df[factor].fillna(20.0), q=5,
+                          labels=False, duplicates='drop')
+        elif factor == 'seeing':
+            bins = pd.cut(metadata_df[factor].fillna(1.0),
+                         bins=[0, 0.8, 1.2, np.inf],
+                         labels=['good', 'median', 'poor'])
+        elif factor == 'psf_fwhm':
+            bins = pd.cut(metadata_df[factor].fillna(0.8),
+                         bins=[0, 0.6, 1.0, np.inf],
+                         labels=['sharp', 'medium', 'broad'])
+        elif factor == 'pixel_scale':
+            bins = pd.cut(metadata_df[factor].fillna(0.2),
+                         bins=[0, 0.1, 0.3, np.inf],
+                         labels=['fine', 'medium', 'coarse'])
+        else:  # Categorical (survey, label)
+            bins = metadata_df[factor].astype(str)
+        
+        strat_components.append(bins.astype(str))
+    
+    # Create composite key
+    strat_key = pd.Series(['_'.join(x) for x in zip(*strat_components)])
+    
+    # Stratified splits
+    train_df, temp_df = train_test_split(
+        metadata_df, test_size=(val_size + test_size),
+        stratify=strat_key, random_state=42
+    )
+    
+    # Second split for val/test
+    temp_strat_key = strat_key[temp_df.index]
+    val_df, test_df = train_test_split(
+        temp_df, test_size=(test_size / (val_size + test_size)),
+        stratify=temp_strat_key, random_state=42
+    )
+    
+    # Verify balance
+    logger.info(f"Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+    logger.info(f"Train lens ratio: {train_df['label'].mean():.3f}")
+    logger.info(f"Val lens ratio: {val_df['label'].mean():.3f}")
+    logger.info(f"Test lens ratio: {test_df['label'].mean():.3f}")
+    
+    return train_df, val_df, test_df
+```
+
+**Integration Points**:
+1. Add to `scripts/convert_real_datasets.py` as optional flag `--stratify-extended`
+2. Create metadata validation step before splitting
+3. Log stratification statistics for verification
+4. Handle edge cases (insufficient samples per stratum)
 
 ---
 
@@ -1447,13 +1613,14 @@ python src/lit_train.py \
 | **P0** ✅ | PSF Fourier matching | Week 1 | None | **COMPLETE** |
 | **P0** ✅ | Metadata v2.0 | Week 1 | None | **COMPLETE** |
 | **P0** ✅ | Dataset converter | Week 1-2 | All above | **COMPLETE** |
+| **P0** ✅ | **Bologna metrics** | Week 2 | None | **COMPLETE** |
 | **P1** 🔄 | Memory-efficient ensemble | Week 2-3 | DataModule | **IN PROGRESS** |
-| **P1** 📋 | Soft-gated physics loss | Week 3 | Lightning module | Planned |
+| **P1** 🔄 | Soft-gated physics loss | Week 3 | Lightning module | **DESIGN READY** |
 | **P1** 📋 | Batched simulator | Week 3 | Physics loss | Planned |
 | **P1** 📋 | Enhanced Lightning module | Week 3-4 | Model registry | Planned |
-| **P2** 📋 | Bologna metrics | Week 5 | Training pipeline | Planned |
-| **P2** 📋 | Extended stratification | Week 5 | DataModule | Planned |
+| **P2** 🔄 | Extended stratification | Week 5 | DataModule | **SPEC COMPLETE** |
 | **P2** 📋 | FiLM conditioning | Week 5-6 | Metadata v2.0 | Planned |
+| **P2** 📋 | Bologna metrics integration | Week 5 | Training pipeline | Planned |
 | **P3** 📋 | Bayesian uncertainty | Week 7 | All models trained | Planned |
 | **P3** 📋 | SMACS J0723 validation | Week 7-8 | Predictions ready | Planned |
 
