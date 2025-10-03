@@ -48,11 +48,18 @@ help:  ## Show this help message
 	@echo "  ARCH           Model architecture (default: resnet18)"
 	@echo "  EPOCHS         Number of training epochs (default: 10)"
 	@echo "  BATCH_SIZE     Batch size (default: 32)"
+	@echo "  DEVICES        Number of devices for Lightning (default: 1)"
+	@echo "  ACCELERATOR    Accelerator type for Lightning (default: auto)"
+	@echo "  PRECISION      Training precision for Lightning (default: 16-mixed)"
+	@echo "  CLOUD_URL      Cloud storage URL for dataset upload"
+	@echo "  TRAIN_URLS     WebDataset URLs for training data"
+	@echo "  VAL_URLS       WebDataset URLs for validation data"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make train ARCH=resnet18 EPOCHS=20"
-	@echo "  make eval ARCH=vit_b_16"
-	@echo "  make dataset CONFIG_FILE=configs/quick.yaml"
+	@echo "  make lit-train ARCH=vit_b_16 DEVICES=2"
+	@echo "  make lit-train-cloud TRAIN_URLS='s3://bucket/train-{0000..0099}.tar'"
+	@echo "  make lit-prepare-dataset CLOUD_URL='s3://bucket/lens-data'"
 
 # ================================
 # ENVIRONMENT SETUP
@@ -188,6 +195,35 @@ clean-data:  ## Clean generated datasets
 	@echo "✅ Datasets cleaned"
 
 # ================================
+# LIGHTNING AI DATASET PREPARATION
+# ================================
+
+.PHONY: lit-prepare-dataset
+lit-prepare-dataset:  ## Prepare dataset for Lightning AI (WebDataset format)
+	@echo "⚡ Preparing dataset for Lightning AI..."
+	$(VENV_BIN)/$(PYTHON) $(SCRIPTS_DIR)/prepare_lightning_dataset.py \
+		--data-root $(or $(DATA_ROOT),$(DEFAULT_DATA)) \
+		--output-dir $(DATA_DIR)/shards \
+		--shard-size $(or $(SHARD_SIZE),1000) \
+		--image-size $(or $(IMAGE_SIZE),224) \
+		--quality $(or $(QUALITY),95)
+	@echo "✅ Dataset prepared for Lightning AI"
+
+.PHONY: lit-upload-dataset
+lit-upload-dataset:  ## Upload dataset shards to cloud storage
+	@echo "☁️ Uploading dataset to cloud storage..."
+	$(VENV_BIN)/$(PYTHON) $(SCRIPTS_DIR)/prepare_lightning_dataset.py \
+		--data-root $(or $(DATA_ROOT),$(DEFAULT_DATA)) \
+		--output-dir $(DATA_DIR)/shards \
+		--cloud-url "$(CLOUD_URL)" \
+		--upload-only
+	@echo "✅ Dataset uploaded to cloud"
+
+.PHONY: lit-dataset-full
+lit-dataset-full: lit-prepare-dataset lit-upload-dataset  ## Full dataset preparation and upload
+	@echo "✅ Full Lightning dataset preparation completed"
+
+# ================================
 # TRAINING
 # ================================
 
@@ -226,6 +262,72 @@ train-quick:  ## Quick training run for testing
 		--epochs 2 \
 		--batch-size 16
 	@echo "✅ Quick training completed"
+
+# ================================
+# LIGHTNING AI TRAINING
+# ================================
+
+.PHONY: lit-train
+lit-train:  ## Train model with Lightning AI
+	@echo "⚡ Training $(or $(ARCH),resnet18) model with Lightning..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--data-root $(or $(DATA_ROOT),$(DEFAULT_DATA)) \
+		--arch $(or $(ARCH),resnet18) \
+		--epochs $(or $(EPOCHS),30) \
+		--batch-size $(or $(BATCH_SIZE),64) \
+		--learning-rate $(or $(LR),3e-4) \
+		--devices $(or $(DEVICES),1) \
+		--accelerator $(or $(ACCELERATOR),auto) \
+		--precision $(or $(PRECISION),16-mixed)
+	@echo "✅ Lightning training completed"
+
+.PHONY: lit-train-cloud
+lit-train-cloud:  ## Train model with Lightning AI on cloud
+	@echo "☁️ Training $(or $(ARCH),vit_b_16) model on cloud..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--use-webdataset \
+		--train-urls "$(TRAIN_URLS)" \
+		--val-urls "$(VAL_URLS)" \
+		--arch $(or $(ARCH),vit_b_16) \
+		--epochs $(or $(EPOCHS),50) \
+		--batch-size $(or $(BATCH_SIZE),128) \
+		--devices $(or $(DEVICES),4) \
+		--accelerator gpu \
+		--precision bf16-mixed \
+		--strategy ddp \
+		--num-workers 16
+	@echo "✅ Cloud training completed"
+
+.PHONY: lit-train-ensemble
+lit-train-ensemble:  ## Train ensemble model with Lightning AI
+	@echo "🤝 Training ensemble model with Lightning..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--data-root $(or $(DATA_ROOT),$(DEFAULT_DATA)) \
+		--model-type ensemble \
+		--archs resnet18,resnet34,vit_b_16 \
+		--epochs $(or $(EPOCHS),40) \
+		--batch-size $(or $(BATCH_SIZE),64) \
+		--devices $(or $(DEVICES),2) \
+		--strategy ddp
+	@echo "✅ Ensemble training completed"
+
+.PHONY: lit-train-resnet18
+lit-train-resnet18:  ## Train ResNet-18 with Lightning
+	@$(MAKE) lit-train ARCH=resnet18
+
+.PHONY: lit-train-vit
+lit-train-vit:  ## Train ViT-B/16 with Lightning
+	@$(MAKE) lit-train ARCH=vit_b_16
+
+.PHONY: lit-train-quick
+lit-train-quick:  ## Quick Lightning training run
+	@echo "⚡ Quick Lightning training run..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--data-root $(DATA_DIR)/processed/quick \
+		--arch resnet18 \
+		--epochs 2 \
+		--batch-size 32
+	@echo "✅ Quick Lightning training completed"
 
 # ================================
 # EVALUATION

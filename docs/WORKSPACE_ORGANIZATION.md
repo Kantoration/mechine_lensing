@@ -141,3 +141,4 @@ demo/lens-demo/
 5. **Deployment scripts**: Add deployment automation
 
 This organization provides a clean, maintainable, and scalable workspace structure for the gravitational lensing detection project.
+

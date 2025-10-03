@@ -184,3 +184,4 @@ class MultiScaleDataset(Dataset):
         
         transform = self.transforms[scale]
         return transform(base_image)
+
