@@ -329,6 +329,37 @@ lit-train-quick:  ## Quick Lightning training run
 		--batch-size 32
 	@echo "✅ Quick Lightning training completed"
 
+.PHONY: lit-train-color-aware
+lit-train-color-aware:  ## Train color-aware lens system with physics priors
+	@echo "🌈 Training color-aware lens system with physics priors..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--config $(CONFIGS_DIR)/color_aware_lens.yaml \
+		--data-root $(or $(DATA_ROOT),$(DATA_DIR)/processed/multi_band) \
+		--arch color_aware_lens \
+		--epochs $(or $(EPOCHS),80) \
+		--batch-size $(or $(BATCH_SIZE),32) \
+		--learning-rate 3e-5 \
+		--devices $(or $(DEVICES),4) \
+		--accelerator $(or $(ACCELERATOR),gpu) \
+		--precision bf16-mixed \
+		--strategy $(or $(STRATEGY),ddp)
+	@echo "✅ Color-aware training completed"
+
+.PHONY: lit-train-color-ensemble
+lit-train-color-ensemble:  ## Train color-aware ensemble system
+	@echo "🌈🤝 Training color-aware ensemble system..."
+	$(VENV_BIN)/$(PYTHON) $(SRC_DIR)/lit_train.py \
+		--config $(CONFIGS_DIR)/color_aware_lens.yaml \
+		--model-type ensemble \
+		--archs enhanced_vit,robust_resnet,color_aware_lens \
+		--data-root $(or $(DATA_ROOT),$(DATA_DIR)/processed/multi_band) \
+		--epochs $(or $(EPOCHS),100) \
+		--batch-size $(or $(BATCH_SIZE),24) \
+		--devices $(or $(DEVICES),4) \
+		--strategy ddp \
+		--precision bf16-mixed
+	@echo "✅ Color-aware ensemble training completed"
+
 # ================================
 # EVALUATION
 # ================================

@@ -51,8 +51,9 @@ This repository has undergone **significant scientific and technical improvement
 - **⚡ Lightning AI Ready**: Easy cloud GPU scaling with Lightning AI
 - **📊 Comprehensive Evaluation**: Detailed metrics and scientific reporting
 - **🛠️ Developer Friendly**: Makefile, pre-commit hooks, comprehensive testing
-- **🧠 State-of-the-Art**: Latest 2024 research integration (Physics-informed, Arc-aware attention)
+- **🧠 State-of-the-Art**: Latest 2024 research integration (Physics-informed, Arc-aware attention, Color consistency)
 - **🔬 Cross-Survey Ready**: PSF normalization for HSC, SDSS, HST compatibility
+- **🌈 Color Physics**: Achromatic lensing constraints with differential extinction corrections
 
 ## 📊 Results Overview (Example)
 
@@ -169,6 +170,11 @@ This project incorporates cutting-edge research findings from the latest gravita
 - **Research Foundation**: [TPR@FPR=0 and TPR@FPR=0.1 metrics](https://arxiv.org/abs/2406.04398) for scientific comparability
 - **Implementation**: Stratified validation with flux-ratio and redshift stratification
 - **Benefits**: True scientific comparability with state-of-the-art lens-finding studies
+
+#### **6. Color Consistency Physics Prior** 🌈
+- **Research Foundation**: General Relativity's achromatic lensing principle - multiple images from same source should have matching intrinsic colors
+- **Implementation**: Soft physics prior with differential extinction corrections and robust outlier handling
+- **Benefits**: Leverages fundamental GR predictions to reduce false positives while accounting for real-world complications (dust, microlensing, time delays)
 
 ### **Repository Status**
 - **Current Implementation**: Production-ready pipeline with ResNet-18/34 and ViT-B/16

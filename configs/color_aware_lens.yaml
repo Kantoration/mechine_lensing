@@ -1,0 +1,144 @@
+# Color-Aware Lens System Configuration
+# Implements physics-informed color consistency constraints
+
+model:
+  arch: "color_aware_lens"
+  backbone: "enhanced_vit"
+  use_color_prior: true
+  color_consistency_weight: 0.1
+  
+  # Backbone configuration
+  backbone_kwargs:
+    input_size: 224
+    patch_size: 16
+    num_layers: 12
+    num_heads: 12
+    hidden_dim: 768
+    mlp_dim: 3072
+    dropout_rate: 0.1
+    bands: 5
+    
+  # Color consistency configuration
+  color_config:
+    reddening_law: "Cardelli89_RV3.1"
+    lambda_E: 0.05
+    robust_delta: 0.1
+    bands: ["g", "r", "i", "z", "y"]
+    
+  # Physics configuration
+  physics_config:
+    constraints:
+      - "lensing_equation"
+      - "mass_conservation" 
+      - "color_consistency"
+    simulator: "lenstronomy"
+    differentiable: true
+
+data:
+  data_root: "data/processed/multi_band"
+  bands: ["g", "r", "i", "z", "y"]
+  extract_colors: true
+  psf_match: true
+  target_fwhm: 1.0
+  lens_light_subtraction: true
+  
+  # Color extraction configuration
+  color_extraction:
+    aperture_type: "isophotal"
+    background_subtraction: true
+    variance_estimation: true
+    min_flux_threshold: 0.1
+    
+  # Data loading
+  batch_size: 32
+  num_workers: 8
+  image_size: 224
+  augment: true
+  
+  # Metadata usage
+  use_metadata: true
+  metadata_columns: 
+    - "redshift"
+    - "seeing"
+    - "psf_fwhm"
+    - "pixel_scale"
+    - "survey"
+    - "sersic_index"
+
+training:
+  epochs: 80
+  learning_rate: 3e-5
+  weight_decay: 1e-5
+  
+  # Curriculum learning for color prior
+  color_prior_schedule:
+    warmup_epochs: 10
+    max_weight: 0.1
+    schedule: "cosine"
+    
+  # Optimization
+  gradient_clip_val: 1.0
+  gradient_clip_algorithm: "norm"
+  accumulate_grad_batches: 1
+  
+  # Early stopping
+  early_stopping:
+    monitor: "val/auroc"
+    mode: "max"
+    patience: 15
+    min_delta: 0.001
+
+hardware:
+  devices: 4
+  accelerator: "gpu"
+  precision: "bf16-mixed"
+  strategy: "ddp"
+  
+  # Memory optimization
+  find_unused_parameters: false
+  ddp_comm_hook: "fp16_compress"
+
+# Logging and monitoring
+logging:
+  logger: "tensorboard"
+  log_every_n_steps: 50
+  val_check_interval: 1.0
+  
+  # Color consistency monitoring
+  color_monitoring:
+    log_color_statistics: true
+    log_extinction_corrections: true
+    log_group_consistency: true
+
+# Checkpointing
+checkpointing:
+  dirpath: "checkpoints/color_aware"
+  filename: "color_aware-{epoch:02d}-{val_auroc:.3f}-{val_color_consistency_loss:.3f}"
+  save_top_k: 5
+  monitor: "val/auroc"
+  mode: "max"
+  save_weights_only: false
+  every_n_epochs: 5
+
+# Evaluation
+evaluation:
+  metrics:
+    - "auroc"
+    - "ap"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "color_consistency_loss"
+    
+  # Bologna Challenge metrics
+  bologna_metrics:
+    enabled: true
+    tpr_at_fpr_0: true
+    tpr_at_fpr_0.1: true
+    flux_ratio_stratification: true
+    
+  # Color consistency evaluation
+  color_evaluation:
+    max_color_difference: 0.2  # mag
+    extinction_tolerance: 0.1  # mag
+    group_consistency_threshold: 0.1

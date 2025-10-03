@@ -1689,6 +1689,7 @@ model:
       - "lensing_equation"
       - "mass_conservation"
       - "shear_consistency"
+      - "color_consistency"  # NEW: Color consistency physics prior
     simulator: "lenstronomy"
     differentiable: true
 
@@ -1705,6 +1706,538 @@ hardware:
   precision: "32"  # Physics requires higher precision
   strategy: "ddp"
 ```
+
+### **Color Consistency Physics Prior** 🌈
+
+**Scientific Foundation**: General Relativity's lensing is achromatic - it preserves surface brightness and deflects all wavelengths equally. Multiple images from the same source should have matching intrinsic colors, providing a powerful physics constraint.
+
+**Real-World Complications**:
+- **Differential dust extinction** in lens galaxy (reddens one image more than another)
+- **Microlensing** (quasar lenses): wavelength-dependent magnification
+- **Intrinsic variability + time delays**: color changes between epochs
+- **PSF/seeing & bandpass calibration** mismatches
+- **Source color gradients** + differential magnification
+
+**Implementation Strategy**: Use color consistency as a **soft prior with nuisance corrections**, not a hard rule.
+
+#### **1. Enhanced Photometry Pipeline**
+
+```python
+class ColorAwarePhotometry:
+    """Enhanced photometry with color consistency validation."""
+    
+    def __init__(self, bands: List[str], target_fwhm: float = 1.0):
+        self.bands = bands
+        self.target_fwhm = target_fwhm
+        self.reddening_laws = {
+            'Cardelli89_RV3.1': [3.1, 2.3, 1.6, 1.2, 0.8],  # g,r,i,z,y
+            'Schlafly11': [3.0, 2.2, 1.5, 1.1, 0.7]
+        }
+    
+    def extract_segment_colors(
+        self, 
+        images: Dict[str, np.ndarray], 
+        segments: List[Dict],
+        lens_light_model: Optional[Dict] = None
+    ) -> Dict[str, Dict]:
+        """
+        Extract colors for each lensed segment with proper photometry.
+        
+        Args:
+            images: Dict of {band: image_array}
+            segments: List of segment dictionaries with masks
+            lens_light_model: Optional lens light subtraction model
+        
+        Returns:
+            Dict with color measurements per segment
+        """
+        results = {}
+        
+        for i, segment in enumerate(segments):
+            segment_colors = {}
+            segment_fluxes = {}
+            segment_errors = {}
+            
+            for band in self.bands:
+                if band not in images:
+                    continue
+                    
+                img = images[band].copy()
+                
+                # Apply lens light subtraction if available
+                if lens_light_model and band in lens_light_model:
+                    img = img - lens_light_model[band]
+                
+                # Extract flux in segment aperture
+                mask = segment['mask']
+                flux, flux_err = self._aperture_photometry(img, mask)
+                
+                segment_fluxes[band] = flux
+                segment_errors[band] = flux_err
+            
+            # Compute colors (magnitude differences)
+            colors = self._compute_colors(segment_fluxes, segment_errors)
+            
+            results[f'segment_{i}'] = {
+                'colors': colors,
+                'fluxes': segment_fluxes,
+                'errors': segment_errors,
+                'band_mask': [band in images for band in self.bands],
+                'segment_info': segment
+            }
+        
+        return results
+    
+    def _aperture_photometry(
+        self, 
+        img: np.ndarray, 
+        mask: np.ndarray
+    ) -> Tuple[float, float]:
+        """Perform aperture photometry with variance estimation."""
+        from photutils.aperture import aperture_photometry
+        from photutils.segmentation import SegmentationImage
+        
+        # Create aperture from mask
+        seg_img = SegmentationImage(mask.astype(int))
+        aperture = seg_img.make_cutout(img, mask)
+        
+        # Estimate background
+        bg_mask = ~mask
+        bg_median = np.median(img[bg_mask])
+        bg_std = np.std(img[bg_mask])
+        
+        # Compute flux and error
+        flux = np.sum(img[mask]) - bg_median * np.sum(mask)
+        flux_err = np.sqrt(np.sum(mask) * bg_std**2)
+        
+        return flux, flux_err
+    
+    def _compute_colors(
+        self, 
+        fluxes: Dict[str, float], 
+        errors: Dict[str, float]
+    ) -> Dict[str, float]:
+        """Compute colors as magnitude differences."""
+        colors = {}
+        
+        # Use r-band as reference
+        if 'r' not in fluxes:
+            return colors
+            
+        ref_flux = fluxes['r']
+        ref_mag = -2.5 * np.log10(ref_flux) if ref_flux > 0 else 99.0
+        
+        for band in self.bands:
+            if band == 'r' or band not in fluxes:
+                continue
+                
+            if fluxes[band] > 0:
+                mag = -2.5 * np.log10(fluxes[band])
+                colors[f'{band}-r'] = mag - ref_mag
+            else:
+                colors[f'{band}-r'] = np.nan
+        
+        return colors
+```
+
+#### **2. Color Consistency Physics Loss**
+
+```python
+class ColorConsistencyPrior:
+    """
+    Physics-informed color consistency loss with robust handling of real-world effects.
+    
+    Implements the color consistency constraint:
+    L_color(G) = Σ_s ρ((c_s - c̄_G - E_s R)^T Σ_s^{-1} (c_s - c̄_G - E_s R)) + λ_E Σ_s E_s^2
+    """
+    
+    def __init__(
+        self, 
+        reddening_law: str = "Cardelli89_RV3.1",
+        lambda_E: float = 0.05,
+        robust_delta: float = 0.1,
+        color_consistency_weight: float = 0.1
+    ):
+        self.reddening_vec = torch.tensor(self._get_reddening_law(reddening_law))
+        self.lambda_E = lambda_E
+        self.delta = robust_delta
+        self.weight = color_consistency_weight
+        
+    def _get_reddening_law(self, law_name: str) -> List[float]:
+        """Get reddening law vector for color bands."""
+        laws = {
+            'Cardelli89_RV3.1': [2.3, 1.6, 1.2, 0.8],  # g-r, r-i, i-z, z-y
+            'Schlafly11': [2.2, 1.5, 1.1, 0.7]
+        }
+        return laws.get(law_name, laws['Cardelli89_RV3.1'])
+    
+    def huber_loss(self, r2: torch.Tensor) -> torch.Tensor:
+        """Robust Huber loss for outlier handling."""
+        d = self.delta
+        return torch.where(
+            r2 < d**2, 
+            0.5 * r2, 
+            d * (torch.sqrt(r2) - 0.5 * d)
+        )
+    
+    @torch.no_grad()
+    def solve_differential_extinction(
+        self, 
+        c_minus_cbar: torch.Tensor, 
+        Sigma_inv: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Solve for optimal differential extinction E_s in closed form.
+        
+        E* = argmin_E (c - c̄ - E R)^T Σ^{-1} (c - c̄ - E R) + λ_E E^2
+        """
+        # Ridge regression along reddening vector
+        num = torch.einsum('bi,bij,bj->b', c_minus_cbar, Sigma_inv, self.reddening_vec)
+        den = torch.einsum('i,bij,j->b', self.reddening_vec, Sigma_inv, self.reddening_vec) + self.lambda_E
+        return num / (den + 1e-8)
+    
+    def __call__(
+        self, 
+        colors: List[torch.Tensor], 
+        color_covs: List[torch.Tensor], 
+        groups: List[List[int]],
+        band_masks: List[torch.Tensor]
+    ) -> torch.Tensor:
+        """
+        Compute color consistency loss for grouped lensed segments.
+        
+        Args:
+            colors: List of color vectors per segment [B-1]
+            color_covs: List of color covariance matrices [B-1, B-1]
+            groups: List of lists defining lens systems
+            band_masks: List of band availability masks
+        
+        Returns:
+            Color consistency loss
+        """
+        if not groups or not colors:
+            return torch.tensor(0.0, device=colors[0].device if colors else 'cpu')
+        
+        total_loss = torch.tensor(0.0, device=colors[0].device)
+        valid_groups = 0
+        
+        for group in groups:
+            if len(group) < 2:  # Need at least 2 segments for color comparison
+                continue
+                
+            # Stack colors and covariances for this group
+            group_colors = torch.stack([colors[i] for i in group])  # [N, B-1]
+            group_covs = torch.stack([color_covs[i] for i in group])  # [N, B-1, B-1]
+            group_masks = torch.stack([band_masks[i] for i in group])  # [N, B-1]
+            
+            # Apply band masks (set missing bands to zero)
+            group_colors = group_colors * group_masks.float()
+            
+            # Compute robust mean (median) of colors in group
+            cbar = torch.median(group_colors, dim=0).values  # [B-1]
+            
+            # Compute residuals
+            c_minus_cbar = group_colors - cbar.unsqueeze(0)  # [N, B-1]
+            
+            # Solve for differential extinction
+            E = self.solve_differential_extinction(c_minus_cbar, group_covs)  # [N]
+            
+            # Apply extinction correction
+            extinction_correction = E.unsqueeze(1) * self.reddening_vec.unsqueeze(0)  # [N, B-1]
+            corrected_residuals = c_minus_cbar - extinction_correction  # [N, B-1]
+            
+            # Compute Mahalanobis distance
+            r2 = torch.einsum('ni,nij,nj->n', corrected_residuals, group_covs, corrected_residuals)
+            
+            # Apply robust loss
+            group_loss = self.huber_loss(r2).mean()
+            total_loss += group_loss
+            valid_groups += 1
+        
+        return (total_loss / max(valid_groups, 1)) * self.weight
+    
+    def compute_color_distance(
+        self, 
+        colors_i: torch.Tensor, 
+        colors_j: torch.Tensor,
+        cov_i: torch.Tensor,
+        cov_j: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute color distance between two segments for graph construction.
+        
+        d_color(s_i, s_j) = min_E |(c_i - c_j - E R)|_{Σ^{-1}}
+        """
+        # Solve for optimal extinction between pair
+        c_diff = colors_i - colors_j
+        cov_combined = cov_i + cov_j
+        
+        E_opt = self.solve_differential_extinction(
+            c_diff.unsqueeze(0), 
+            cov_combined.unsqueeze(0)
+        )[0]
+        
+        # Apply extinction correction
+        corrected_diff = c_diff - E_opt * self.reddening_vec
+        
+        # Compute Mahalanobis distance
+        distance = torch.sqrt(
+            torch.einsum('i,ij,j', corrected_diff, torch.inverse(cov_combined), corrected_diff)
+        )
+        
+        return distance
+```
+
+#### **3. Integration with Training Pipeline**
+
+```python
+class ColorAwareLensSystem(pl.LightningModule):
+    """Enhanced lens system with color consistency physics prior."""
+    
+    def __init__(
+        self, 
+        backbone: nn.Module,
+        use_color_prior: bool = True,
+        color_consistency_weight: float = 0.1,
+        **kwargs
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        
+        self.backbone = backbone
+        self.color_prior = ColorConsistencyPrior(
+            color_consistency_weight=color_consistency_weight
+        ) if use_color_prior else None
+        
+        # Color-aware grouping head
+        self.grouping_head = nn.Sequential(
+            nn.Linear(backbone.output_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)  # Grouping probability
+        )
+    
+    def training_step(self, batch, batch_idx):
+        """Training step with color consistency loss."""
+        # Standard forward pass
+        images = batch["image"]
+        labels = batch["label"].float()
+        
+        # Get backbone features and predictions
+        features = self.backbone(images)
+        logits = self.grouping_head(features)
+        
+        # Standard classification loss
+        cls_loss = F.binary_cross_entropy_with_logits(logits.squeeze(1), labels)
+        
+        total_loss = cls_loss
+        
+        # Add color consistency loss if available
+        if (self.color_prior and 
+            "colors" in batch and 
+            "color_covs" in batch and 
+            "groups" in batch):
+            
+            color_loss = self.color_prior(
+                batch["colors"],
+                batch["color_covs"], 
+                batch["groups"],
+                batch.get("band_masks", [])
+            )
+            total_loss += color_loss
+            
+            self.log("train/color_consistency_loss", color_loss, prog_bar=True)
+        
+        self.log("train/classification_loss", cls_loss, prog_bar=True)
+        self.log("train/total_loss", total_loss, prog_bar=True)
+        
+        return total_loss
+    
+    def validation_step(self, batch, batch_idx):
+        """Validation with color consistency monitoring."""
+        # Standard validation
+        images = batch["image"]
+        labels = batch["label"].int()
+        
+        features = self.backbone(images)
+        logits = self.grouping_head(features)
+        probs = torch.sigmoid(logits.squeeze(1))
+        
+        # Log standard metrics
+        self.log("val/auroc", self.auroc(probs, labels), prog_bar=True)
+        self.log("val/ap", self.ap(probs, labels), prog_bar=True)
+        
+        # Monitor color consistency if available
+        if (self.color_prior and 
+            "colors" in batch and 
+            "color_covs" in batch and 
+            "groups" in batch):
+            
+            with torch.no_grad():
+                color_loss = self.color_prior(
+                    batch["colors"],
+                    batch["color_covs"],
+                    batch["groups"], 
+                    batch.get("band_masks", [])
+                )
+                self.log("val/color_consistency_loss", color_loss)
+                
+                # Log color consistency statistics
+                self._log_color_statistics(batch)
+    
+    def _log_color_statistics(self, batch):
+        """Log color consistency statistics for monitoring."""
+        colors = batch["colors"]
+        groups = batch["groups"]
+        
+        for i, group in enumerate(groups):
+            if len(group) < 2:
+                continue
+                
+            group_colors = torch.stack([colors[j] for j in group])
+            color_std = torch.std(group_colors, dim=0).mean()
+            
+            self.log(f"val/color_std_group_{i}", color_std)
+```
+
+#### **4. Configuration for Color Consistency**
+
+Create `configs/color_aware_lens.yaml`:
+
+```yaml
+model:
+  arch: "color_aware_lens"
+  backbone: "enhanced_vit"
+  use_color_prior: true
+  color_consistency_weight: 0.1
+  
+  color_config:
+    reddening_law: "Cardelli89_RV3.1"
+    lambda_E: 0.05
+    robust_delta: 0.1
+    bands: ["g", "r", "i", "z", "y"]
+    
+  physics_config:
+    constraints:
+      - "lensing_equation"
+      - "mass_conservation" 
+      - "color_consistency"
+    simulator: "lenstronomy"
+    differentiable: true
+
+data:
+  data_root: "data/processed/multi_band"
+  bands: ["g", "r", "i", "z", "y"]
+  extract_colors: true
+  psf_match: true
+  target_fwhm: 1.0
+  lens_light_subtraction: true
+  
+  color_extraction:
+    aperture_type: "isophotal"
+    background_subtraction: true
+    variance_estimation: true
+
+training:
+  epochs: 80
+  batch_size: 32
+  learning_rate: 3e-5
+  weight_decay: 1e-5
+  
+  # Curriculum learning for color prior
+  color_prior_schedule:
+    warmup_epochs: 10
+    max_weight: 0.1
+    schedule: "cosine"
+
+hardware:
+  devices: 4
+  accelerator: "gpu"
+  precision: "bf16-mixed"
+  strategy: "ddp"
+```
+
+#### **5. Data-Aware Color Prior Gating**
+
+```python
+class DataAwareColorPrior:
+    """Color consistency prior with data-aware gating."""
+    
+    def __init__(self, base_prior: ColorConsistencyPrior):
+        self.base_prior = base_prior
+        self.quasar_detector = QuasarMorphologyDetector()
+        self.microlensing_estimator = MicrolensingRiskEstimator()
+    
+    def compute_prior_weight(
+        self, 
+        images: torch.Tensor,
+        metadata: Dict,
+        groups: List[List[int]]
+    ) -> torch.Tensor:
+        """
+        Compute per-system prior weight based on data characteristics.
+        
+        Returns:
+            Weight tensor [num_groups] in [0, 1]
+        """
+        weights = []
+        
+        for group in groups:
+            # Check if system is quasar-like
+            is_quasar = self.quasar_detector.is_quasar_like(images[group])
+            
+            # Estimate microlensing risk
+            microlensing_risk = self.microlensing_estimator.estimate_risk(
+                metadata, group
+            )
+            
+            # Check for strong time delays
+            time_delay_risk = self._estimate_time_delay_risk(metadata, group)
+            
+            # Compute combined weight
+            if is_quasar or microlensing_risk > 0.7 or time_delay_risk > 0.5:
+                weight = 0.1  # Strongly downweight
+            elif microlensing_risk > 0.3 or time_delay_risk > 0.2:
+                weight = 0.5  # Moderate downweight
+            else:
+                weight = 1.0  # Full weight
+            
+            weights.append(weight)
+        
+        return torch.tensor(weights, device=images.device)
+    
+    def __call__(self, *args, **kwargs):
+        """Apply data-aware gating to color consistency loss."""
+        base_loss = self.base_prior(*args, **kwargs)
+        
+        # Apply per-group weights
+        if "groups" in kwargs and "images" in kwargs:
+            weights = self.compute_prior_weight(
+                kwargs["images"], 
+                kwargs.get("metadata", {}),
+                kwargs["groups"]
+            )
+            base_loss = base_loss * weights.mean()
+        
+        return base_loss
+```
+
+#### **6. Integration Benefits**
+
+**Scientific Advantages**:
+- **Physics Constraint**: Enforces fundamental GR prediction of achromatic lensing
+- **False Positive Reduction**: Eliminates systems with inconsistent colors
+- **Robust Handling**: Accounts for real-world complications (dust, microlensing)
+- **Multi-Band Leverage**: Uses full spectral information, not just morphology
+
+**Technical Advantages**:
+- **Soft Prior**: Doesn't break training with hard constraints
+- **Data-Aware**: Automatically adjusts based on source type
+- **Graph Integration**: Enhances segment grouping with color similarity
+- **Monitoring**: Provides interpretable color consistency metrics
+
+**Implementation Priority**: **P1 (High)** - This is a scientifically sound enhancement that leverages fundamental physics principles while being robust to real-world complications.
 
 ---
 
