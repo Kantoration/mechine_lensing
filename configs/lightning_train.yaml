@@ -1,0 +1,97 @@
+# Lightning AI Training Configuration
+# This configuration file provides default settings for Lightning training
+
+# Model configuration
+model:
+  arch: "resnet18"
+  model_type: "single"  # single, ensemble, physics_informed
+  pretrained: true
+  dropout_rate: 0.5
+  bands: 3
+  ensemble_strategy: "uncertainty_weighted"
+  physics_weight: 0.1
+  uncertainty_estimation: true
+  compile_model: false
+
+# Training configuration
+training:
+  epochs: 30
+  batch_size: 64
+  learning_rate: 3e-4
+  weight_decay: 1e-4
+  scheduler_type: "cosine"  # cosine, plateau, step
+  warmup_epochs: 5
+
+# Hardware configuration
+hardware:
+  devices: 1
+  accelerator: "auto"  # auto, gpu, cpu
+  precision: "16-mixed"  # 32, 16-mixed, bf16-mixed
+  strategy: null  # ddp, ddp_cpu, etc.
+
+# Data configuration
+data:
+  # Local dataset
+  data_root: null
+  val_split: 0.1
+  
+  # WebDataset (cloud streaming)
+  use_webdataset: false
+  train_urls: null  # e.g., "s3://bucket/train-{0000..0099}.tar"
+  val_urls: null    # e.g., "s3://bucket/val-{0000..0009}.tar"
+  test_urls: null   # e.g., "s3://bucket/test-{0000..0009}.tar"
+  
+  # Data loading
+  num_workers: 8
+  image_size: 224
+  augment: true
+  pin_memory: true
+  persistent_workers: true
+  
+  # WebDataset specific
+  shuffle_buffer_size: 10000
+  cache_dir: null
+
+# Logging configuration
+logging:
+  log_dir: "logs"
+  checkpoint_dir: "checkpoints"
+  use_wandb: false
+  wandb_project: "gravitational-lens-classification"
+  
+  # Monitoring
+  monitor: "val/auroc"
+  mode: "max"  # min, max
+  patience: 10
+
+# Reproducibility
+reproducibility:
+  seed: 42
+  deterministic: true
+  benchmark: false
+
+# Cloud-specific configurations
+cloud:
+  # Lightning Cloud
+  lightning_cloud:
+    enabled: false
+    project_id: null
+    cluster_id: null
+    
+  # AWS S3
+  aws:
+    enabled: false
+    bucket: null
+    region: "us-east-1"
+    
+  # Google Cloud Storage
+  gcs:
+    enabled: false
+    bucket: null
+    project: null
+    
+  # Hugging Face Hub
+  huggingface:
+    enabled: false
+    repo_id: null
+    token: null

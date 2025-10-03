@@ -1,0 +1,83 @@
+# Lightning Cloud Configuration
+# Optimized settings for cloud GPU training
+
+# Model configuration
+model:
+  arch: "vit_b_16"  # Use larger model for cloud GPUs
+  model_type: "single"
+  pretrained: true
+  dropout_rate: 0.5
+  bands: 3
+  compile_model: true  # Enable compilation for cloud GPUs
+
+# Training configuration
+training:
+  epochs: 50
+  batch_size: 128  # Larger batch size for cloud GPUs
+  learning_rate: 3e-4
+  weight_decay: 1e-4
+  scheduler_type: "cosine"
+  warmup_epochs: 5
+
+# Hardware configuration (optimized for cloud)
+hardware:
+  devices: 4  # Use multiple GPUs
+  accelerator: "gpu"
+  precision: "bf16-mixed"  # Use bf16 for A100/H100
+  strategy: "ddp"  # Distributed data parallel
+
+# Data configuration (WebDataset for cloud)
+data:
+  use_webdataset: true
+  train_urls: "s3://your-bucket/lens-train-{0000..0099}.tar"
+  val_urls: "s3://your-bucket/lens-val-{0000..0009}.tar"
+  test_urls: "s3://your-bucket/lens-test-{0000..0009}.tar"
+  
+  # Optimized for cloud
+  num_workers: 16  # More workers for cloud instances
+  image_size: 224
+  augment: true
+  pin_memory: true
+  persistent_workers: true
+  
+  # WebDataset optimization
+  shuffle_buffer_size: 20000
+  cache_dir: "/tmp/wds_cache"  # Use local SSD cache
+
+# Logging configuration
+logging:
+  log_dir: "s3://your-bucket/logs"  # Cloud logging
+  checkpoint_dir: "s3://your-bucket/checkpoints"  # Cloud checkpoints
+  use_wandb: true
+  wandb_project: "gravitational-lens-cloud"
+  
+  # Monitoring
+  monitor: "val/auroc"
+  mode: "max"
+  patience: 15  # More patience for longer training
+
+# Reproducibility
+reproducibility:
+  seed: 42
+  deterministic: true
+  benchmark: false
+
+# Cloud-specific configurations
+cloud:
+  # Lightning Cloud
+  lightning_cloud:
+    enabled: true
+    project_id: "your-project-id"
+    cluster_id: "your-cluster-id"
+    
+  # AWS S3
+  aws:
+    enabled: true
+    bucket: "your-bucket"
+    region: "us-east-1"
+    
+  # Environment variables (set in Lightning Cloud)
+  env_vars:
+    AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+    AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+    AWS_DEFAULT_REGION: "us-east-1"
