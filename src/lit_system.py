@@ -160,12 +160,20 @@ class LitLensSystem(pl.LightningModule):
         """Forward pass through the model."""
         return self.model(x)
     
-    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch, batch_idx: int) -> torch.Tensor:
         """Training step."""
-        x, y = batch["image"], batch["label"].float()
+        # Handle both tuple and dict formats
+        if isinstance(batch, dict):
+            x, y = batch["image"], batch["label"].float()
+        else:
+            # Handle tuple format (image, label)
+            x, y = batch[0], batch[1].float()
         
         # Forward pass
-        logits = self(x).squeeze(1)
+        logits = self(x)
+        # Handle different output shapes
+        if logits.dim() > 1 and logits.shape[1] == 1:
+            logits = logits.squeeze(1)
         loss = F.binary_cross_entropy_with_logits(logits, y)
         
         # Calculate probabilities and predictions
@@ -196,12 +204,20 @@ class LitLensSystem(pl.LightningModule):
         self.train_recall.reset()
         self.train_f1.reset()
     
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def validation_step(self, batch, batch_idx: int) -> torch.Tensor:
         """Validation step."""
-        x, y = batch["image"], batch["label"].float()
+        # Handle both tuple and dict formats
+        if isinstance(batch, dict):
+            x, y = batch["image"], batch["label"].float()
+        else:
+            # Handle tuple format (image, label)
+            x, y = batch[0], batch[1].float()
         
         # Forward pass
-        logits = self(x).squeeze(1)
+        logits = self(x)
+        # Handle different output shapes
+        if logits.dim() > 1 and logits.shape[1] == 1:
+            logits = logits.squeeze(1)
         loss = F.binary_cross_entropy_with_logits(logits, y)
         
         # Calculate probabilities and predictions
@@ -259,12 +275,20 @@ class LitLensSystem(pl.LightningModule):
         self.val_auroc.reset()
         self.val_ap.reset()
     
-    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def test_step(self, batch, batch_idx: int) -> torch.Tensor:
         """Test step."""
-        x, y = batch["image"], batch["label"].float()
+        # Handle both tuple and dict formats
+        if isinstance(batch, dict):
+            x, y = batch["image"], batch["label"].float()
+        else:
+            # Handle tuple format (image, label)
+            x, y = batch[0], batch[1].float()
         
         # Forward pass
-        logits = self(x).squeeze(1)
+        logits = self(x)
+        # Handle different output shapes
+        if logits.dim() > 1 and logits.shape[1] == 1:
+            logits = logits.squeeze(1)
         loss = F.binary_cross_entropy_with_logits(logits, y)
         
         # Calculate probabilities and predictions
@@ -459,7 +483,10 @@ class LitEnsembleSystem(pl.LightningModule):
         x, y = batch["image"], batch["label"].float()
         
         # Forward pass
-        logits = self(x).squeeze(1)
+        logits = self(x)
+        # Handle different output shapes
+        if logits.dim() > 1 and logits.shape[1] == 1:
+            logits = logits.squeeze(1)
         loss = F.binary_cross_entropy_with_logits(logits, y)
         
         # Log loss
@@ -472,7 +499,10 @@ class LitEnsembleSystem(pl.LightningModule):
         x, y = batch["image"], batch["label"].float()
         
         # Forward pass
-        logits = self(x).squeeze(1)
+        logits = self(x)
+        # Handle different output shapes
+        if logits.dim() > 1 and logits.shape[1] == 1:
+            logits = logits.squeeze(1)
         loss = F.binary_cross_entropy_with_logits(logits, y)
         
         # Calculate probabilities and predictions

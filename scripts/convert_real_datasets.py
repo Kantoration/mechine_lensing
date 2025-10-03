@@ -67,12 +67,14 @@ class ImageMetadataV2:
     """
     # File paths
     filepath: str
-    variance_map_path: Optional[str] = None
     
     # Label Provenance (CRITICAL)
     label: int  # 0=non-lens, 1=lens, -1=unlabeled
     label_source: str  # 'sim:bologna' | 'obs:castles' | 'weak:gzoo' | 'pretrain:galaxiesml'
     label_confidence: float  # 0.0-1.0 (1.0 for Bologna/CASTLES, <0.5 for weak)
+    
+    # Optional fields
+    variance_map_path: Optional[str] = None
     
     # Redshift
     z_phot: float = -1.0  # photometric redshift (-1 if missing)
