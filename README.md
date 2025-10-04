@@ -186,20 +186,20 @@ This project incorporates cutting-edge research findings from the latest gravita
 
 ---
 
-## 🌌 **Cluster-to-Cluster Lensing: Revolutionary Detection Pipeline**
+## 🌌 **Cluster Lensing: Revolutionary Detection Pipeline**
 
-**📄 Complete Documentation**: [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (6,400+ lines)
+**📄 Complete Documentation**: [CLUSTER_LENSING_SECTION.md](docs/CLUSTER_LENSING_SECTION.md) (8,500+ lines)
 
-*This section summarizes our most ambitious research direction: automated detection of cluster-cluster gravitational lensing systems. For complete technical details, implementation code, and scientific justification, see the dedicated documentation.*
+*This section summarizes our most ambitious research direction: automated detection of cluster-scale gravitational lensing systems (primarily galaxy-cluster lensing). For complete technical details, implementation code, and scientific justification, see the dedicated documentation.*
 
-### 🎯 **Why Cluster-to-Cluster Lensing Matters: The Scientific Impact**
+### 🎯 **Why ClCluster Lensing Matters: The Scientific Impact**
 
-Cluster-cluster gravitational lensing represents one of the most challenging and scientifically valuable phenomena in modern astrophysics. Unlike galaxy-galaxy lensing, cluster-cluster systems involve massive galaxy clusters acting as lenses for background galaxy clusters, creating complex multi-scale gravitational lensing effects.
+Galaxy-cluster gravitational lensing represents one of the most challenging and scientifically valuable phenomena in modern astrophysics. Massive galaxy clusters act as gravitational lenses for background galaxies, creating spectacular arc-like distortions.
 
 **The Scientific Revolution**:
-- **Dark Matter Mapping**: Cluster-cluster lenses provide the most direct probes of dark matter distribution on cluster scales
+- **Dark Matter Mapping**: Galaxy-cluster lenses provide direct probes of dark matter distribution on cluster scales
 - **Cosmological Parameters**: These systems enable precise measurements of the Hubble constant and dark energy equation of state
-- **High-Redshift Universe**: Background clusters at z > 1.5 provide unique windows into early galaxy formation
+- **High-Redshift Universe**: Magnified background galaxies at z > 1.5 provide unique windows into early galaxy formation
 - **Fundamental Physics**: Test general relativity on the largest scales and probe alternative gravity theories
 
 **The Detection Challenge**:
@@ -240,7 +240,7 @@ Building on cutting-edge research from Mulroy+2017, Kokorev+2022, and latest 202
 - **Ensemble Fusion**: Temperature scaling with uncertainty-weighted combination
 - **Anomaly Detection**: Deep SVDD backstop for robust predictions
 
-**📄 Full Implementation**: See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) for complete code, theory, and citations.
+**📄 Full Implementation**: See [CLUSTER_LENSING_SECTION.md](docs/CLUSTER_LENSING_SECTION.md) for complete code, theory, and citations (8,500+ lines).
 
 ### 🚀 **Implementation Roadmap: 8-Week Sprint to Scientific Breakthrough**
 
@@ -1126,7 +1126,7 @@ This project maintains three comprehensive documentation files, each with a dist
 
 **📄 Document**: [INTEGRATION_IMPLEMENTATION_PLAN.md](docs/INTEGRATION_IMPLEMENTATION_PLAN.md) (3,500+ lines)
 
-### **3. CLUSTER_TO_CLUSTER_LENSING_SECTION.md** - Galaxy-Cluster & Cluster-Cluster Lensing
+### **3. CLUSTER_LENSING_SECTION.md** - Galaxy-Cluster  Lensing
 **Purpose**: Complete technical specification for cluster-scale lensing detection  
 **Audience**: Specialized researchers working on cluster-scale lensing  
 
@@ -1148,15 +1148,15 @@ This project maintains three comprehensive documentation files, each with a dist
 - Production-ready code with comprehensive testing
 - Operational rigor: leakage prevention, prior estimation, reproducibility
 
-**📄 Document**: [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (6,800+ lines)
+**📄 Document**: [CLUSTER_LENSING_SECTION.md](docs/CLUSTER_LENSING_SECTION.md) (8,500+ lines)
 
 ---
 
 **Navigation Guide**:
 - **New to the project?** Start with this README
 - **Implementing galaxy-galaxy lensing?** See [INTEGRATION_IMPLEMENTATION_PLAN.md](docs/INTEGRATION_IMPLEMENTATION_PLAN.md)
-- **Working on galaxy-cluster lensing?** See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) ← **HIGH IMPACT** 🌟
-- **Working on cluster-cluster lensing?** See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (secondary focus)
+- **Working on galaxy-cluster lensing?** See [CLUSTER_LENSING_SECTION.md](docs/CLUSTER_LENSING_SECTION.md) ← **HIGH IMPACT** 🌟
+- **Working on cluster-cluster lensing?** See [CLUSTER_LENSING_SECTION.md](docs/CLUSTER_LENSING_SECTION.md) (secondary focus, not observed)
 - **Looking for astronomer-friendly explanations?** See "For Astronomers" section below
 
 ---
