@@ -221,9 +221,11 @@ Building on cutting-edge research from Mulroy+2017, Kokorev+2022, and latest 202
 
 - **Comprehensive Feature Engineering**:
   - **Photometric**: Color consistency, dispersion, gradients
-  - **Morphological**: Tangential alignment, arc curvature, ellipticity
-  - **Geometric**: BCG distance, segment separation, radial distribution
+  - **Morphological**: Multiple separated images, localized intensity peaks, edge density
+  - **Geometric**: Image separation distances, spatial clustering, relative positions
   - **Survey Context**: Seeing, PSF FWHM, pixel scale, depth
+
+**Note**: Unlike galaxy-galaxy lensing with smooth tangential arcs, cluster-cluster systems typically produce **multiple separated images** rather than continuous arcs, due to the complex mass distribution and larger Einstein radii.
 
 #### **Track B: Compact CNN with Multiple Instance Learning (MIL)**
 - **Vision Transformer Backbone** (ViT-Small pretrained)
@@ -842,6 +844,45 @@ class UncertaintyWeightedEnsemble(nn.Module):
 - **Improved Sensitivity**: Different models detect different types of lensing features
 - **Robustness**: Less sensitive to noise or unusual image characteristics
 - **Confidence Estimation**: Can provide better uncertainty estimates
+
+#### **Future Ensemble Enhancements**
+
+Our ensemble framework is designed to integrate advanced model architectures for improved performance. See [INTEGRATION_IMPLEMENTATION_PLAN.md](docs/INTEGRATION_IMPLEMENTATION_PLAN.md) for detailed specifications:
+
+**Planned Advanced Models**:
+
+1. **Enhanced Vision Transformers** - Long-range dependency modeling with astronomical coordinate encoding
+2. **Robust ResNets** - Adversarially trained for noise and artifact robustness  
+3. **Physics-Informed Neural Networks (PINNs)** - Enforces gravitational lensing equations directly in loss function
+4. **FiLM-Conditioned Networks** - Adapts to varying observing conditions using metadata
+5. **Graph Attention Networks (GATs)** - Models relationships between objects in multi-object lens systems
+6. **Bayesian Neural Networks** - Provides rigorous uncertainty quantification for rare events
+
+**Integration Strategy**:
+```python
+# Future extensible ensemble (conceptual)
+ensemble = AdvancedEnsemble(
+    models={
+        'resnet18': ResNetBackbone(),
+        'vit_b16': ViTBackbone(),
+        'enhanced_vit': EnhancedViTBackbone(),        # With astro coordinates
+        'pinn_lens': PhysicsInformedBackbone(),        # Lens equation constraints
+        'film_resnet': FiLMConditionedBackbone(),      # Metadata conditioning
+        'bayesian_ensemble': BayesianEnsembleBackbone() # Uncertainty quantification
+    },
+    fusion_strategy='learned'  # or 'uncertainty_weighted'
+)
+```
+
+**Expected Performance Impact**:
+- **+5-10% accuracy** from model diversity
+- **Better calibration** from Bayesian uncertainty
+- **Fewer false positives** from physics constraints
+- **Survey adaptability** from metadata conditioning
+
+**📄 Full Details**: See [Advanced Model Integration Section](docs/INTEGRATION_IMPLEMENTATION_PLAN.md#-future-ensemble-models-advanced-architecture-integration) for complete implementation specifications, configuration files, and integration roadmap.
+
+---
 
 ### 📊 Evaluation: How We Measure Success
 

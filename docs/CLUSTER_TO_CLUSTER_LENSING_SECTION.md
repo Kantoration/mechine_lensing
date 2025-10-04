@@ -1757,9 +1757,11 @@ confusion with galaxy-galaxy lensing, and cross-survey systematic uncertainties.
   
 - **Task 1.2**: Create `ClusterLensingFeatureExtractor` with survey-aware features
   - Photometric features (color consistency, dispersion, gradients)
-  - Morphological features (tangential alignment, arc curvature)
-  - Geometric features (BCG distance, segment separation)
+  - Morphological features (multiple separated images, localized intensity peaks, edge density)
+  - Geometric features (image separation distances, spatial clustering patterns)
   - Survey context features (seeing, PSF FWHM, survey depth)
+  
+  **Note**: Cluster-cluster lensing produces multiple separated images rather than smooth tangential arcs typical of galaxy-galaxy lensing, due to complex cluster mass distributions and larger Einstein radii.
   
 - **Task 1.3**: Add `ClusterSafeAugmentation` to existing augmentation pipeline
   - Geometric transforms only (preserve colors)
@@ -1949,15 +1951,16 @@ class FlareGalaxyDiffusion(DiffusionModel):
         return variants
     
     def create_lensing_preservation_mask(self, lensing_features):
-        """Create mask that preserves critical lensing properties."""
-        # Preserve Einstein radius, arc curvature, and tangential alignment
+        """Create mask that preserves critical lensing properties for cluster-cluster systems."""
+        # Preserve Einstein radius and multiple separated image positions
+        # Note: Cluster-cluster systems produce multiple separated images, not smooth arcs
         mask = torch.zeros_like(lensing_features['image'])
         
-        # Mark arc regions with high preservation weight
-        arc_mask = lensing_features['arc_segmentation'] > 0.5
-        mask[arc_mask] = 1.0
+        # Mark multiple image regions with high preservation weight
+        image_mask = lensing_features['image_segmentation'] > 0.5
+        mask[image_mask] = 1.0
         
-        # Mark Einstein ring region with maximum preservation
+        # Mark critical curve region with maximum preservation
         ring_distance = lensing_features['distance_to_einstein_radius']
         ring_mask = (ring_distance < 0.2)  # Within 20% of Einstein radius
         mask[ring_mask] = 2.0
@@ -2856,11 +2859,13 @@ class ClusterLensingViT(nn.Module):
         return logits
 ```
 
-**Why This Works**:
-- **Self-attention** learns to focus on arc-like structures regardless of position
+**Why This Works for Cluster-Cluster Lensing**:
+- **Self-attention** learns to focus on multiple separated image structures regardless of position
 - **Patch embedding** naturally handles varying PSF sizes across surveys
-- **Positional encoding** preserves spatial relationships critical for tangential alignment
-- **Multi-head attention** discovers different lensing signatures (arcs, counter-images, distortions)
+- **Positional encoding** preserves spatial relationships between multiple lensed images
+- **Multi-head attention** discovers different lensing signatures (multiple images, intensity peaks, spatial clustering)
+
+**Note**: Unlike galaxy-galaxy lensing with smooth tangential arcs, cluster-cluster systems produce multiple separated images that require attention mechanisms to identify spatial correlations rather than arc continuity.
 
 **Citation**: Bologna Challenge (2023), Transformers for Strong Lensing Detection
 
