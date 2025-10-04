@@ -1126,15 +1126,21 @@ This project maintains three comprehensive documentation files, each with a dist
 
 **📄 Document**: [INTEGRATION_IMPLEMENTATION_PLAN.md](docs/INTEGRATION_IMPLEMENTATION_PLAN.md) (3,500+ lines)
 
-### **3. CLUSTER_TO_CLUSTER_LENSING_SECTION.md** - Cluster-Cluster Lensing Research
-**Purpose**: Complete technical specification for cluster-cluster lensing detection  
+### **3. CLUSTER_TO_CLUSTER_LENSING_SECTION.md** - Galaxy-Cluster & Cluster-Cluster Lensing
+**Purpose**: Complete technical specification for cluster-scale lensing detection  
 **Audience**: Specialized researchers working on cluster-scale lensing  
+
+**Scientific Focus**:
+- **Primary**: **Galaxy-cluster lensing** (cluster lensing background galaxy) - π ≈ 10⁻³, ~500 known systems, **higher scientific impact**
+- **Secondary**: **Cluster-cluster lensing** (cluster lensing background cluster) - π ≈ 10⁻⁴, ~5-10 known systems
+
 **Content**:
-- Dual-track architecture (Classic ML + Compact CNN)
-- Color consistency framework (Mulroy+2017, Kokorev+2022)
+- **Production design for galaxy-cluster lensing** with arc morphology features (NEW!)
+- **Correct Elkan-Noto PU learning** implementation (labeling propensity c, not prior π)
+- **Top-k aggregation with radial prior** (Einstein radius-aware scoring)
+- Dual-track architecture (Classic ML + Deep Learning)
+- Color consistency framework with along-arc achromaticity
 - Self-supervised pretraining strategies
-- Positive-Unlabeled (PU) learning for extreme rarity
-- Complete implementation code with theory and citations
 - State-of-the-art methodological advancements (2024-2025)
 - Light-Traces-Mass (LTM) framework integration
 - JWST UNCOVER program synergies
@@ -1142,14 +1148,15 @@ This project maintains three comprehensive documentation files, each with a dist
 - Production-ready code with comprehensive testing
 - Operational rigor: leakage prevention, prior estimation, reproducibility
 
-**📄 Document**: [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (6,400+ lines)
+**📄 Document**: [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (6,800+ lines)
 
 ---
 
 **Navigation Guide**:
 - **New to the project?** Start with this README
 - **Implementing galaxy-galaxy lensing?** See [INTEGRATION_IMPLEMENTATION_PLAN.md](docs/INTEGRATION_IMPLEMENTATION_PLAN.md)
-- **Working on cluster-cluster lensing?** See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md)
+- **Working on galaxy-cluster lensing?** See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) ← **HIGH IMPACT** 🌟
+- **Working on cluster-cluster lensing?** See [CLUSTER_TO_CLUSTER_LENSING_SECTION.md](docs/CLUSTER_TO_CLUSTER_LENSING_SECTION.md) (secondary focus)
 - **Looking for astronomer-friendly explanations?** See "For Astronomers" section below
 
 ---

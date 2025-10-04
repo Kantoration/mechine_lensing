@@ -142,3 +142,4 @@ evaluation:
     max_color_difference: 0.2  # mag
     extinction_tolerance: 0.1  # mag
     group_consistency_threshold: 0.1
+

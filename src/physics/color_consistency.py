@@ -445,3 +445,4 @@ class MicrolensingRiskEstimator:
                 risk += 0.4
         
         return min(risk, 1.0)
+

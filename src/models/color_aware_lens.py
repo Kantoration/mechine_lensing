@@ -418,3 +418,4 @@ class ColorAwareEnsembleSystem(pl.LightningModule):
         """Reset metrics at end of validation epoch."""
         self.auroc.reset()
         self.ap.reset()
+
