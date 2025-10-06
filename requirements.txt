@@ -71,6 +71,9 @@ astropy>=5.0.0
 h5py>=3.7.0
 photutils>=1.8.0
 
+# System monitoring and benchmarking
+psutil>=5.8.0
+
 
 
 

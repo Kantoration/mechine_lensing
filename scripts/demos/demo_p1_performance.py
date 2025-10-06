@@ -16,22 +16,22 @@ Usage:
     python scripts/demo_p1_performance.py --full-demo --amp
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
 import time
 from pathlib import Path
 
+# Third-party imports
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-from utils.benchmark import BenchmarkSuite, PerformanceMetrics
-from utils.numerical import clamp_probs
+# Local imports
+from src.utils.benchmark import BenchmarkSuite, PerformanceMetrics
+from src.utils.numerical import clamp_probs
 
 # Setup logging
 logging.basicConfig(

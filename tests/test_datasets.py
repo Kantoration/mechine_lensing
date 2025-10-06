@@ -21,9 +21,10 @@ sys.path.insert(0, str(project_root))
 # Test imports
 try:
     from src.datasets.lens_dataset import LensDataset, LensDatasetError
-    from src.datasets.optimized_dataloader import create_dataloaders
+    from src.datasets.optimized_dataloader import create_dataloaders, create_single_dataloader
     from src.datasets import LensDataset as LensDatasetImport
     from src.datasets import create_dataloaders as create_dataloaders_import
+    from src.datasets import create_single_dataloader as create_single_dataloader_import
     IMPORTS_WORKING = True
 except ImportError as e:
     IMPORTS_WORKING = False
@@ -48,6 +49,11 @@ class TestDatasetImports(unittest.TestCase):
         """Test that create_dataloaders can be imported."""
         self.assertIsNotNone(create_dataloaders_import)
         self.assertEqual(create_dataloaders_import, create_dataloaders)
+
+    def test_create_single_dataloader_import(self):
+        """Test that create_single_dataloader can be imported."""
+        self.assertIsNotNone(create_single_dataloader_import)
+        self.assertEqual(create_single_dataloader_import, create_single_dataloader)
 
 
 class TestLensDataset(unittest.TestCase):

@@ -31,12 +31,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import psutil
 
 # Initialize logger first so it's available for GPUtil import handling
 logger = logging.getLogger(__name__)
 
-# Optional dependency for GPU monitoring
+# Optional dependencies for GPU and system monitoring
 try:
     import GPUtil
     GPUTIL_AVAILABLE = True
@@ -44,6 +43,14 @@ except ImportError:
     GPUtil = None
     GPUTIL_AVAILABLE = False
     logger.warning("GPUtil not available. GPU utilization monitoring will be disabled.")
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    psutil = None
+    PSUTIL_AVAILABLE = False
+    logger.warning("psutil not available. System monitoring will be disabled.")
 
 
 @dataclass

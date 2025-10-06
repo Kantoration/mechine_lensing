@@ -15,29 +15,29 @@ Usage:
     python scripts/comprehensive_physics_validation.py --config configs/validation.yaml
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
+# Third-party imports
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 import yaml
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-from validation.lensing_metrics import LensingMetricsValidator, validate_lensing_physics
-from validation.uncertainty_metrics import UncertaintyValidator, validate_predictive_uncertainty
-from validation.source_reconstruction import SourceQualityValidator, validate_source_quality
-from validation.realistic_lens_models import (
+# Local imports
+from src.validation.lensing_metrics import LensingMetricsValidator, validate_lensing_physics
+from src.validation.uncertainty_metrics import UncertaintyValidator, validate_predictive_uncertainty
+from src.validation.source_reconstruction import SourceQualityValidator, validate_source_quality
+from src.validation.realistic_lens_models import (
     SIELensModel, NFWLensModel, CompositeLensModel, 
     RealisticLensValidator, create_realistic_lens_models
 )
-from validation.enhanced_reporting import EnhancedReporter, create_comprehensive_report
-from validation.visualization import AttentionVisualizer, create_physics_plots
+from src.validation.enhanced_reporting import EnhancedReporter, create_comprehensive_report
+from src.validation.visualization import AttentionVisualizer, create_physics_plots
 
 logger = logging.getLogger(__name__)
 

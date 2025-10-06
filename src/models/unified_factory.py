@@ -15,7 +15,7 @@ Key Features:
 """
 
 import logging
-from typing import Dict, Any, Optional, Union, Tuple
+from typing import Dict, Any, Optional, Union, Tuple, List
 from dataclasses import dataclass
 
 import torch
@@ -36,7 +36,7 @@ class ModelConfig:
     # Model type and architecture
     model_type: str = "single"  # "single", "ensemble", "physics_informed"
     architecture: str = "resnet18"
-    architectures: Optional[list[str]] = None  # For ensemble models
+    architectures: Optional[List[str]] = None  # For ensemble models
     
     # Model parameters
     bands: int = 3
@@ -194,82 +194,144 @@ class UnifiedModelFactory:
         
         try:
             # Check if it's an enhanced model
-            if architecture in ["enhanced_light_transformer_arc_aware", 
+            if architecture in ["enhanced_light_transformer_arc_aware",
                               "enhanced_light_transformer_multi_scale",
                               "enhanced_light_transformer_adaptive"]:
                 # Use ensemble registry for enhanced models
-                backbone, head, feature_dim = make_ensemble_model(
-                    name=architecture,
-                    bands=config.bands,
-                    pretrained=config.pretrained,
-                    dropout_p=config.dropout_p
-                )
-                model = nn.Sequential(backbone, head)
+                try:
+                    backbone, head, feature_dim = make_ensemble_model(
+                        name=architecture,
+                        bands=config.bands,
+                        pretrained=config.pretrained,
+                        dropout_p=config.dropout_p
+                    )
+                    model = nn.Sequential(backbone, head)
+                    logger.debug(f"Successfully created enhanced model backbone: {architecture}")
+                except Exception as e:
+                    logger.error(f"Failed to create enhanced model backbone '{architecture}': {e}")
+                    raise ValueError(f"Enhanced model backbone creation failed for '{architecture}': {e}") from e
             else:
                 # Use ensemble registry for standard models
-                backbone, head, feature_dim = make_ensemble_model(
-                    name=architecture,
-                    pretrained=config.pretrained,
-                    dropout_p=config.dropout_p
-                )
-                model = nn.Sequential(backbone, head)
-            
+                try:
+                    backbone, head, feature_dim = make_ensemble_model(
+                        name=architecture,
+                        pretrained=config.pretrained,
+                        dropout_p=config.dropout_p
+                    )
+                    model = nn.Sequential(backbone, head)
+                    logger.debug(f"Successfully created standard model backbone: {architecture}")
+                except Exception as e:
+                    logger.error(f"Failed to create standard model backbone '{architecture}': {e}")
+                    raise ValueError(f"Standard model backbone creation failed for '{architecture}': {e}") from e
+
             # Apply performance optimizations
-            model = self._apply_performance_optimizations(model, config)
-            
+            try:
+                model = self._apply_performance_optimizations(model, config)
+                logger.debug(f"Successfully applied performance optimizations to {architecture}")
+            except Exception as e:
+                logger.warning(f"Failed to apply performance optimizations to '{architecture}': {e}")
+                # Don't fail the entire model creation for optimization failures
+
             # Auto-wrap physics-capable models if needed
-            model = self._maybe_wrap_physics(model, config.architecture)
-            
-            logger.info(f"Created single model: {architecture}")
+            try:
+                model = self._maybe_wrap_physics(model, config.architecture)
+                if self.model_registry.get(architecture, {}).get("supports_physics", False):
+                    logger.debug(f"Successfully applied physics wrapper to {architecture}")
+            except Exception as e:
+                logger.warning(f"Failed to apply physics wrapper to '{architecture}': {e}")
+                # Don't fail the entire model creation for physics wrapper failures
+
+            logger.info(f"Successfully created single model: {architecture}")
             return model
-            
+
+        except ImportError as e:
+            logger.error(f"Import error while creating model '{architecture}': {e}")
+            raise ImportError(f"Cannot create model '{architecture}' due to missing dependencies: {e}") from e
+        except (ValueError, TypeError) as e:
+            logger.error(f"Configuration error while creating model '{architecture}': {e}")
+            raise ValueError(f"Invalid configuration for model '{architecture}': {e}") from e
+        except (MemoryError, RuntimeError) as e:
+            logger.error(f"Resource error while creating model '{architecture}': {e}")
+            raise RuntimeError(f"Insufficient resources to create model '{architecture}': {e}") from e
         except Exception as e:
-            raise ValueError(f"Failed to create model '{architecture}': {e}") from e
+            logger.error(f"Unexpected error while creating model '{architecture}': {e}")
+            raise RuntimeError(f"Failed to create model '{architecture}' due to unexpected error: {e}") from e
     
     def _create_ensemble_model(self, config: ModelConfig) -> nn.Module:
         """Create an ensemble model."""
-        from .ensemble.weighted import create_uncertainty_weighted_ensemble
-        
-        # Validate ensemble configuration
-        if not config.architectures or len(config.architectures) < 2:
-            raise ValueError(f"Ensemble requires at least 2 architectures, got: {config.architectures}")
-        
-        # Create ensemble members
-        member_configs = []
-        for arch in config.architectures:
-            # Validate each architecture
-            if arch not in self.model_registry and arch not in ["enhanced_light_transformer_arc_aware", 
-                                                               "enhanced_light_transformer_multi_scale",
-                                                               "enhanced_light_transformer_adaptive"]:
-                logger.warning(f"Unknown architecture in ensemble: {arch}")
-            
-            member_config = {
-                'name': arch,
-                'bands': config.bands,
-                'pretrained': config.pretrained,
-                'dropout_p': config.dropout_p
-            }
-            member_configs.append(member_config)
-        
         try:
+            from .ensemble.weighted import create_uncertainty_weighted_ensemble
+
+            # Validate ensemble configuration
+            if not config.architectures or len(config.architectures) < 2:
+                raise ValueError(f"Ensemble requires at least 2 architectures, got: {config.architectures}")
+
+            # Create ensemble members
+            member_configs = []
+            failed_members = []
+            successful_members = 0
+
+            for arch in config.architectures:
+                # Validate each architecture
+                if arch not in self.model_registry and arch not in ["enhanced_light_transformer_arc_aware",
+                                                                   "enhanced_light_transformer_multi_scale",
+                                                                   "enhanced_light_transformer_adaptive"]:
+                    logger.warning(f"Unknown architecture in ensemble: {arch}")
+                    failed_members.append(arch)
+                    continue
+
+                member_config = {
+                    'name': arch,
+                    'bands': config.bands,
+                    'pretrained': config.pretrained,
+                    'dropout_p': config.dropout_p
+                }
+                member_configs.append(member_config)
+                successful_members += 1
+
+            if successful_members < 2:
+                raise ValueError(f"Ensemble requires at least 2 valid architectures. "
+                               f"Successful: {successful_members}, Failed: {failed_members}")
+
             # Create ensemble
-            if config.ensemble_strategy == "uncertainty_weighted":
-                ensemble = create_uncertainty_weighted_ensemble(member_configs)
-            elif config.ensemble_strategy == "physics_informed":
-                ensemble = PhysicsInformedEnsemble(
-                    member_configs=member_configs,
-                    physics_weight=config.physics_weight,
-                    uncertainty_estimation=config.uncertainty_estimation,
-                    attention_analysis=True
-                )
-            else:
-                raise ValueError(f"Unknown ensemble strategy: {config.ensemble_strategy}")
-            
-            logger.info(f"Created ensemble model with {len(config.architectures)} members")
-            return ensemble
-            
+            try:
+                if config.ensemble_strategy == "uncertainty_weighted":
+                    ensemble = create_uncertainty_weighted_ensemble(member_configs)
+                    logger.debug(f"Successfully created uncertainty-weighted ensemble with {len(member_configs)} members")
+                elif config.ensemble_strategy == "physics_informed":
+                    ensemble = PhysicsInformedEnsemble(
+                        member_configs=member_configs,
+                        physics_weight=config.physics_weight,
+                        uncertainty_estimation=config.uncertainty_estimation,
+                        attention_analysis=True
+                    )
+                    logger.debug(f"Successfully created physics-informed ensemble with {len(member_configs)} members")
+                else:
+                    raise ValueError(f"Unknown ensemble strategy: {config.ensemble_strategy}")
+
+                logger.info(f"Successfully created ensemble model with {len(config.architectures)} members "
+                          f"({len(member_configs)} valid, {len(failed_members)} failed)")
+                return ensemble
+
+            except ImportError as e:
+                logger.error(f"Import error while creating ensemble: {e}")
+                raise ImportError(f"Cannot create ensemble due to missing dependencies: {e}") from e
+            except Exception as e:
+                logger.error(f"Error during ensemble creation: {e}")
+                raise ValueError(f"Failed to create ensemble with strategy '{config.ensemble_strategy}': {e}") from e
+
+        except ImportError as e:
+            logger.error(f"Import error while creating ensemble model: {e}")
+            raise ImportError(f"Cannot create ensemble model due to missing dependencies: {e}") from e
+        except (ValueError, TypeError) as e:
+            logger.error(f"Configuration error while creating ensemble model: {e}")
+            raise ValueError(f"Invalid ensemble configuration: {e}") from e
+        except (MemoryError, RuntimeError) as e:
+            logger.error(f"Resource error while creating ensemble model: {e}")
+            raise RuntimeError(f"Insufficient resources to create ensemble model: {e}") from e
         except Exception as e:
-            raise ValueError(f"Failed to create ensemble with strategy '{config.ensemble_strategy}': {e}") from e
+            logger.error(f"Unexpected error while creating ensemble model: {e}")
+            raise RuntimeError(f"Failed to create ensemble model due to unexpected error: {e}") from e
     
     def _create_physics_informed_model(self, config: ModelConfig) -> nn.Module:
         """Create a physics-informed ensemble model."""

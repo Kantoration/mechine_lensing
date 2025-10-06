@@ -11,6 +11,7 @@ Usage:
     python scripts/demo_physics_ensemble.py --create-dummy-data
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
@@ -18,16 +19,15 @@ import time
 from pathlib import Path
 from typing import Dict, List, Any
 
+# Third-party imports
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-from models.ensemble.physics_informed_ensemble import PhysicsInformedEnsemble
-from models.ensemble.registry import create_physics_informed_ensemble
+# Local imports
+from src.models.ensemble.physics_informed_ensemble import PhysicsInformedEnsemble
+from src.models.ensemble.registry import create_physics_informed_ensemble
 
 # Setup logging
 logging.basicConfig(

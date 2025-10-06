@@ -63,7 +63,7 @@ class EnhancedUncertaintyEnsemble(nn.Module):
         
         Args:
             member_configs: List of member configurations, each containing:
-                - 'name': Architecture name (e.g., 'resnet18', 'vit_b16', 'light_transformer')
+                - 'name': Architecture name (e.g., 'resnet18', 'vit_b_16', 'light_transformer')
                 - 'bands': Number of input channels
                 - 'pretrained': Whether to use pretrained weights
                 - 'dropout_p': Dropout probability
@@ -454,7 +454,7 @@ def create_three_member_ensemble(
             'temperature': 1.0
         },
         {
-            'name': 'vit_b16', 
+            'name': 'vit_b_16', 
             'bands': bands,
             'pretrained': pretrained,
             'dropout_p': 0.2,

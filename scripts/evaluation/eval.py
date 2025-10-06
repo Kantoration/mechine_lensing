@@ -17,12 +17,17 @@ Usage:
         --cnn-weights checkpoints/best_resnet18.pt --vit-weights checkpoints/best_vit_b_16.pt
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
 from pathlib import Path
 
-from _common import setup_logging, parse_shared_eval_args, get_device, setup_seed
+# Third-party imports
+# (none in this section)
+
+# Local imports
+from scripts.common import setup_logging, parse_shared_eval_args, get_device, setup_seed
 
 
 def parse_args() -> argparse.Namespace:

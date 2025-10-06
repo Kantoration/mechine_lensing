@@ -14,8 +14,8 @@ from typing import Dict, List, Optional, Any
 import logging
 
 from ..physics.color_consistency import ColorConsistencyPrior, DataAwareColorPrior
-from .enhanced_vit import EnhancedVisionTransformer
-from .robust_resnet import RobustResNet
+from .backbones.vit import ViTBackbone
+from .backbones.resnet import ResNetBackbone
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +54,29 @@ class ColorAwareLensSystem(pl.LightningModule):
         self.save_hyperparameters()
         
         # Initialize backbone
-        backbone_kwargs = backbone_kwargs or {}
+        backbone_kwargs = dict(backbone_kwargs or {})
+        bands = backbone_kwargs.pop("bands", backbone_kwargs.pop("in_ch", 5))
+        pretrained = backbone_kwargs.pop("pretrained", True)
+
         if backbone == "enhanced_vit":
-            self.backbone = EnhancedVisionTransformer(**backbone_kwargs)
+            self.backbone = ViTBackbone(in_ch=bands, pretrained=pretrained)
         elif backbone == "robust_resnet":
-            self.backbone = RobustResNet(**backbone_kwargs)
+            arch = backbone_kwargs.pop("arch", "resnet34")
+            self.backbone = ResNetBackbone(
+                arch=arch, in_ch=bands, pretrained=pretrained
+            )
         else:
             raise ValueError(f"Unknown backbone: {backbone}")
-        
+
+        # Get feature dimension from backbone
+        if hasattr(self.backbone, "get_feature_dim"):
+            self.feature_dim = self.backbone.get_feature_dim()
+        elif hasattr(self.backbone, "feature_dim"):
+            self.feature_dim = self.backbone.feature_dim
+        else:
+            # Default feature dimension for backbones
+            self.feature_dim = 512 if backbone == "robust_resnet" else 768
+
         # Color consistency physics prior
         if use_color_prior:
             self.color_prior = ColorConsistencyPrior(
@@ -74,10 +89,10 @@ class ColorAwareLensSystem(pl.LightningModule):
             self.color_prior = DataAwareColorPrior(self.color_prior)
         else:
             self.color_prior = None
-        
+
         # Color-aware grouping head
         self.grouping_head = nn.Sequential(
-            nn.Linear(self.backbone.output_dim, 256),
+            nn.Linear(self.feature_dim, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(256, 128),
@@ -105,7 +120,7 @@ class ColorAwareLensSystem(pl.LightningModule):
             Logits [B, 1]
         """
         # Extract features from backbone
-        features = self.backbone(x, metadata=metadata)
+        features = self._encode_backbone(x, metadata=metadata)
         
         # Apply grouping head
         logits = self.grouping_head(features)
@@ -119,7 +134,7 @@ class ColorAwareLensSystem(pl.LightningModule):
         labels = batch["label"].float()
         
         # Get backbone features and predictions
-        features = self.backbone(images, metadata=batch.get("metadata"))
+        features = self._encode_backbone(images, metadata=batch.get("metadata"))
         logits = self.grouping_head(features)
         
         # Standard classification loss
@@ -157,7 +172,7 @@ class ColorAwareLensSystem(pl.LightningModule):
         images = batch["image"]
         labels = batch["label"].int()
         
-        features = self.backbone(images, metadata=batch.get("metadata"))
+        features = self._encode_backbone(images, metadata=batch.get("metadata"))
         logits = self.grouping_head(features)
         probs = torch.sigmoid(logits.squeeze(1))
         
@@ -191,7 +206,7 @@ class ColorAwareLensSystem(pl.LightningModule):
         images = batch["image"]
         labels = batch["label"].int()
         
-        features = self.backbone(images, metadata=batch.get("metadata"))
+        features = self._encode_backbone(images, metadata=batch.get("metadata"))
         logits = self.grouping_head(features)
         probs = torch.sigmoid(logits.squeeze(1))
         
@@ -256,12 +271,24 @@ class ColorAwareLensSystem(pl.LightningModule):
         """Reset metrics at end of validation epoch."""
         self.auroc.reset()
         self.ap.reset()
+
+    def _encode_backbone(
+        self, images: torch.Tensor, metadata: Optional[Dict] = None
+    ) -> torch.Tensor:
+        """Encode images with backbone, handling metadata gracefully."""
+        if metadata is not None:
+            try:
+                return self.backbone(images, metadata=metadata)
+            except TypeError:
+                # Backbone doesn't support metadata, use without it
+                pass
+        return self.backbone(images)
     
     def on_test_epoch_end(self) -> None:
         """Reset metrics at end of test epoch."""
         self.auroc.reset()
         self.ap.reset()
-    
+
     def get_color_consistency_summary(self) -> Dict[str, float]:
         """Get summary of color consistency performance."""
         if not self.color_loss_history:
@@ -418,4 +445,16 @@ class ColorAwareEnsembleSystem(pl.LightningModule):
         """Reset metrics at end of validation epoch."""
         self.auroc.reset()
         self.ap.reset()
+
+    def _encode_backbone(
+        self, images: torch.Tensor, metadata: Optional[Dict] = None
+    ) -> torch.Tensor:
+        """Encode images with backbone, handling metadata gracefully."""
+        if metadata is not None:
+            try:
+                return self.backbone(images, metadata=metadata)
+            except TypeError:
+                # Backbone doesn't support metadata, use without it
+                pass
+        return self.backbone(images)
 

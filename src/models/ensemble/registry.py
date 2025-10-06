@@ -23,6 +23,14 @@ from ..heads.binary import BinaryHead
 logger = logging.getLogger(__name__)
 
 
+# Architecture name aliases for backward compatibility
+ALIASES = {
+    'vit_b16': 'vit_b_16',
+    'ViT-B/16': 'vit_b_16',
+    'vit_b_16': 'vit_b_16'  # Already correct
+}
+
+
 # Registry of available model architectures
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     'resnet18': {
@@ -39,7 +47,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         'input_size': 64,
         'description': 'ResNet-34 Convolutional Neural Network (Deeper)'
     },
-    'vit_b16': {
+    'vit_b_16': {
         'backbone_class': ViTBackbone,
         'backbone_kwargs': {},
         'feature_dim': 768,
@@ -142,7 +150,7 @@ def make_model(
     Create a backbone-head pair for the specified architecture.
     
     Args:
-        name: Model architecture name ('resnet18', 'resnet34', 'vit_b16', 'light_transformer', 'trans_enc_s')
+        name: Model architecture name ('resnet18', 'resnet34', 'vit_b_16', 'light_transformer', 'trans_enc_s')
         bands: Number of input channels/bands
         pretrained: Whether to use pretrained weights
         dropout_p: Dropout probability for the classification head
@@ -153,10 +161,13 @@ def make_model(
     Raises:
         ValueError: If the architecture name is not supported
     """
+    # Resolve architecture aliases for backward compatibility
+    name = ALIASES.get(name, name)
+
     if name not in MODEL_REGISTRY:
         available = list(MODEL_REGISTRY.keys())
         raise ValueError(f"Unknown model architecture '{name}'. Available: {available}")
-    
+
     # Get model configuration
     config = MODEL_REGISTRY[name]
     backbone_class = config['backbone_class']
@@ -333,7 +344,7 @@ def validate_ensemble_compatibility(architectures: list[str], bands: int) -> Non
 # Convenience functions for common ensemble configurations
 def create_resnet_vit_ensemble(bands: int = 3, pretrained: bool = True) -> list[Tuple[nn.Module, nn.Module]]:
     """Create a ResNet-18 + ViT-B/16 ensemble."""
-    return create_ensemble_members(['resnet18', 'vit_b16'], bands=bands, pretrained=pretrained)
+    return create_ensemble_members(['resnet18', 'vit_b_16'], bands=bands, pretrained=pretrained)
 
 
 def create_resnet_ensemble(bands: int = 3, pretrained: bool = True) -> list[Tuple[nn.Module, nn.Module]]:
@@ -357,7 +368,7 @@ def create_comprehensive_ensemble(bands: int = 3, pretrained: bool = True) -> li
     architectures = [
         'resnet18',  # Fast CNN baseline
         'resnet34',  # Deeper CNN
-        'vit_b16',   # Transformer baseline
+        'vit_b_16',   # Transformer baseline
         'enhanced_light_transformer_arc_aware',  # Physics-informed arc detection
         'enhanced_light_transformer_adaptive'   # Adaptive physics attention
     ]

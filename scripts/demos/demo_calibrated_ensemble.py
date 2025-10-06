@@ -13,23 +13,23 @@ Usage:
     python scripts/demo_calibrated_ensemble.py --config configs/baseline.yaml
 """
 
+# Standard library imports
 import sys
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-import torch
-import numpy as np
 from typing import Dict, Any
-import matplotlib.pyplot as plt
 
-from models.ensemble.weighted import UncertaintyWeightedEnsemble
-from models.ensemble.registry import make_model
-from calibration.temperature import TemperatureScaler, compute_calibration_metrics
-from metrics.calibration import reliability_diagram
-from utils.config import load_config
-from datasets.lens_dataset import LensDataset
+# Third-party imports
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+# Local imports
+from src.calibration.temperature import TemperatureScaler, compute_calibration_metrics
+from src.datasets.lens_dataset import LensDataset
+from src.metrics.calibration import reliability_diagram
+from src.models.ensemble.registry import make_model
+from src.models.ensemble.weighted import UncertaintyWeightedEnsemble
+from src.utils.config import load_config
 
 def create_mock_ensemble() -> UncertaintyWeightedEnsemble:
     """Create a mock ensemble for demonstration."""

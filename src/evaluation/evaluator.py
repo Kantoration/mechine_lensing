@@ -47,8 +47,8 @@ from sklearn.metrics import (
 
 from src.datasets.lens_dataset import LensDataset
 from src.models import build_model, list_available_models
-from calibration.temperature import TemperatureScaler, compute_calibration_metrics
-from metrics.calibration import reliability_diagram
+from src.calibration.temperature import TemperatureScaler, compute_calibration_metrics
+from src.metrics.calibration import reliability_diagram
 
 # Setup logging
 logging.basicConfig(
@@ -322,8 +322,11 @@ def main():
     # Required arguments
     parser.add_argument("--weights", type=str, required=True,
                         help="Path to trained model weights")
+    # Get available models as flat list of strings
+    models = list_available_models()
+    choices = [*models.get("single_models", []), *models.get("physics_models", [])]
     parser.add_argument("--arch", type=str, required=True,
-                        choices=list_available_models(),
+                        choices=choices,
                         help="Model architecture")
     
     # Data arguments
@@ -368,7 +371,9 @@ def main():
         
         # Auto-detect image size if not specified
         if args.img_size is None:
-            args.img_size = model.get_input_size()
+            from src.models.ensemble.registry import get_model_info
+            model_info = get_model_info(args.arch)
+            args.img_size = model_info.get('input_size', 224)
             logger.info(f"Auto-detected image size for {args.arch}: {args.img_size}")
         
         # Create test dataset and loader

@@ -88,10 +88,10 @@ Documentation = "https://github.com/Kantoration/mechine_lensing/wiki"
 "Bug Tracker" = "https://github.com/Kantoration/mechine_lensing/issues"
 
 [project.scripts]
-lens-train = "src.train:main"
-lens-eval = "src.eval:main"
-lens-ensemble = "src.eval_ensemble:main"
-lens-generate = "scripts.generate_dataset:main"
+lens-train = "src.training.trainer:main"
+lens-eval = "src.evaluation.evaluator:main"
+lens-ensemble = "src.evaluation.ensemble_evaluator:main"
+lens-generate = "scripts.utilities.generate_dataset:main"
 
 [tool.setuptools_scm]
 write_to = "src/_version.py"
@@ -138,7 +138,7 @@ exclude = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -199,6 +199,7 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
 ]
+
 
 
 

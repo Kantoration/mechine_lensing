@@ -23,21 +23,26 @@ Version: 2.0.0 (Post-Scientific-Review)
 
 from __future__ import annotations
 
+# Standard library imports
 import argparse
 import logging
 import sys
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
-import warnings
 
+# Third-party imports
 import h5py
 import numpy as np
 import pandas as pd
 from astropy.io import fits
-from scipy import fft, ndimage
 from PIL import Image
+from scipy import fft, ndimage
 from tqdm import tqdm
+
+# Local imports
+# (none in this section)
 
 # Setup logging
 logging.basicConfig(

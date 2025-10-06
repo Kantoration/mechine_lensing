@@ -28,6 +28,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
+
+from src.utils.device_utils import batch_numpy_conversion, memory_efficient_visualization
 from scipy import ndimage
 from skimage import measure, morphology
 
@@ -112,20 +114,28 @@ class AttentionVisualizer:
         for i in range(B):
             col_idx = 0
             
-            # Original image
-            img = images[i].permute(1, 2, 0).cpu().numpy()
+            # Original image with batched CPU transfer
+            if images.is_cuda:
+                img_tensor = images[i].cpu()
+            else:
+                img_tensor = images[i]
+            img = img_tensor.permute(1, 2, 0).numpy()
             if img.shape[2] == 3:
                 img = (img - img.min()) / (img.max() - img.min())
             else:
                 img = img[:, :, 0]
-            
+
             axes[i, col_idx].imshow(img, cmap='gray' if img.shape[2] == 1 else None)
             axes[i, col_idx].set_title(f'Original Image {i+1}')
             axes[i, col_idx].axis('off')
             col_idx += 1
-            
-            # Attention map
-            attn_map = attention_maps[i].cpu().numpy()
+
+            # Attention map with batched CPU transfer
+            if attention_maps.is_cuda:
+                attn_tensor = attention_maps[i].cpu()
+            else:
+                attn_tensor = attention_maps[i]
+            attn_map = attn_tensor.numpy()
             im = axes[i, col_idx].imshow(attn_map, cmap=self.attention_cmap, vmin=0, vmax=1)
             axes[i, col_idx].set_title(f'Attention Map {i+1}')
             axes[i, col_idx].axis('off')

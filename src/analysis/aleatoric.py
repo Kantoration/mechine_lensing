@@ -430,8 +430,25 @@ def topk_indices(
             _, indices = torch.topk(scores, k, largest=True)
             return indices
         
-        # Combine and return
-        return torch.cat(selected_indices)
+        # Combine selected indices
+        combined_indices = torch.cat(selected_indices)
+
+        # Ensure exactly k samples by backfilling from remaining pool if needed
+        if len(combined_indices) < k:
+            remaining_mask = torch.ones(len(scores), dtype=torch.bool, device=scores.device)
+            remaining_mask[combined_indices] = False
+            remaining = torch.where(remaining_mask)[0]
+
+            # Add highest scoring samples from remaining pool
+            pad_size = min(k - len(combined_indices), len(remaining))
+            if pad_size > 0:
+                remaining_scores = scores[remaining]
+                _, remaining_topk = torch.topk(remaining_scores, pad_size, largest=True)
+                pad_indices = remaining[remaining_topk]
+                combined_indices = torch.cat([combined_indices, pad_indices])
+
+        # Return exactly k samples (truncate if somehow more than k)
+        return combined_indices[:k]
 
 
 def ensemble_disagreement(prob_members: List[torch.Tensor]) -> Dict[str, torch.Tensor]:

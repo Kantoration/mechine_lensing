@@ -140,12 +140,16 @@ def set_seed(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    
+
+    # Guard CUDA-specific calls (CPU-only safety)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
     # For deterministic behavior (may impact performance)
     if os.getenv('DETERMINISTIC', 'false').lower() == 'true':
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        if torch.cuda.is_available():
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
     else:
         torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
     

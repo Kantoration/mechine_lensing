@@ -8,19 +8,19 @@ and uploads them to cloud storage (S3, GCS, etc.).
 
 from __future__ import annotations
 
+# Standard library imports
 import argparse
 import logging
 import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# Third-party imports
 import fsspec
 from tqdm import tqdm
 
-# Add src to path for imports
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-from lit_datamodule import create_webdataset_shards, upload_shards_to_cloud
+# Local imports
+from src.lit_datamodule import create_webdataset_shards, upload_shards_to_cloud
 
 # Setup logging
 logging.basicConfig(

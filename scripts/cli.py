@@ -15,16 +15,21 @@ Usage:
     python scripts/cli.py benchmark-attn --attention-types arc_aware,adaptive
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
 from pathlib import Path
 
-# Setup project paths using centralized utility
-from src.utils.path_utils import setup_project_paths
-project_root = setup_project_paths()
+# Third-party imports
+# (none in this section)
 
-from _common import setup_logging, get_device, setup_seed
+# Local imports
+from src.utils.path_utils import setup_project_paths
+from scripts.common import setup_logging, get_device, setup_seed
+
+# Setup project paths
+project_root = setup_project_paths()
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -280,7 +285,7 @@ def run_eval(args: argparse.Namespace) -> int:
     logger.info(f"Starting {args.mode} evaluation...")
     
     # Import and run the unified eval script
-    from eval import main as eval_main
+    from src.evaluation.evaluator import main as eval_main
     
     # Temporarily modify sys.argv to pass arguments to eval script
     original_argv = sys.argv[:]
@@ -326,7 +331,7 @@ def run_benchmark(args: argparse.Namespace) -> int:
             sys.argv.append('--verbose')
         
         # Import and run the benchmark script
-        from benchmark_p2_attention import main as benchmark_main
+        from scripts.benchmarks.benchmark_p2_attention import main as benchmark_main
         result = benchmark_main()
         
         # Restore original sys.argv

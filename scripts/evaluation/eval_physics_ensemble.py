@@ -17,26 +17,26 @@ Usage:
     python scripts/eval_physics_ensemble.py --checkpoint checkpoints/best_physics_ensemble.pt --visualize
 """
 
+# Standard library imports
 import argparse
 import logging
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
+# Third-party imports
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-from datasets.lens_dataset import LensDataset
-from models.ensemble.physics_informed_ensemble import PhysicsInformedEnsemble
-from metrics.classification import compute_classification_metrics
-from validation.physics_validator import PhysicsValidator, validate_attention_physics
+# Local imports
+from src.datasets.lens_dataset import LensDataset
+from src.models.ensemble.physics_informed_ensemble import PhysicsInformedEnsemble
+from src.metrics.classification import compute_classification_metrics
+from src.validation.physics_validator import PhysicsValidator, validate_attention_physics
 
 # Setup logging
 logging.basicConfig(

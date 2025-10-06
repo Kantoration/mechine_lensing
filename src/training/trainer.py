@@ -34,23 +34,18 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from src.datasets.optimized_dataloader import create_dataloaders
 from src.models import create_model, ModelConfig, list_available_models
+from src.utils.device_utils import get_device, move_model_to_device, move_batch_to_device
+from src.utils.seed_utils import set_seed
+from src.training.common.base_trainer import BaseTrainer
 from torch.utils.data import DataLoader, random_split
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Import centralized logging
+from src.utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
-def set_seed(seed: int = 42) -> None:
-    """Set random seeds for reproducible training."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    logger.info(f"Set random seed to {seed}")
+# Seed management is now handled by src.utils.seed_utils
 
 
 # create_dataloaders function moved to optimized_dataloader.py
@@ -68,11 +63,15 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     num_samples = 0
     
     for images, labels in train_loader:
-        images = images.to(device, non_blocking=device.type == 'cuda')
-        labels = labels.float().to(device, non_blocking=device.type == 'cuda')
-        
+        # Move batch to device using centralized device management
+        images = move_batch_to_device(images, device)
+        labels = move_batch_to_device(labels, device)
+
+        # Cast labels to float for BCE loss
+        labels = labels.float()
+
         optimizer.zero_grad()
-        
+
         logits = model(images).squeeze()
         loss = criterion(logits, labels)
         
@@ -102,9 +101,13 @@ def validate(model, val_loader, criterion, device):
     
     with torch.no_grad():
         for images, labels in val_loader:
-            images = images.to(device, non_blocking=device.type == 'cuda')
-            labels = labels.float().to(device, non_blocking=device.type == 'cuda')
-            
+            # Move batch to device using centralized device management
+            images = move_batch_to_device(images, device)
+            labels = move_batch_to_device(labels, device)
+
+            # Cast labels to float for BCE loss
+            labels = labels.float()
+
             logits = model(images).squeeze()
             loss = criterion(logits, labels)
             
@@ -129,9 +132,13 @@ def evaluate(model, test_loader, criterion, device):
     
     with torch.no_grad():
         for images, labels in test_loader:
-            images = images.to(device, non_blocking=device.type == 'cuda')
-            labels = labels.float().to(device, non_blocking=device.type == 'cuda')
-            
+            # Move batch to device using centralized device management
+            images = move_batch_to_device(images, device)
+            labels = move_batch_to_device(labels, device)
+
+            # Cast labels to float for BCE loss
+            labels = labels.float()
+
             logits = model(images).squeeze()
             loss = criterion(logits, labels)
             
@@ -219,44 +226,63 @@ def main():
         logger.error("Or use the installed console script: lens-generate --out data_scientific_test")
         sys.exit(1)
     
-    # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Setup device using centralized device management
+    device = get_device()
     logger.info(f"Using device: {device}")
+
+    # Set seed for reproducibility using centralized seed management
+    set_seed(args.seed, getattr(args, 'deterministic', False))
     
     try:
         # Create model first to get recommended image size
         logger.info("Creating model...")
-        
-        # Use unified model factory
-        model_config = ModelConfig(
-            model_type="single",
-            architecture=args.arch,
-            bands=3,  # Default to RGB, could be made configurable
-            pretrained=args.pretrained,
-            dropout_p=args.dropout_rate
-        )
-        model = create_model(model_config)
-        
-        model = model.to(device)
-        
+
+        # Use unified model factory with error handling
+        try:
+            model_config = ModelConfig(
+                model_type="single",
+                architecture=args.arch,
+                bands=3,  # Default to RGB, could be made configurable
+                pretrained=args.pretrained,
+                dropout_p=args.dropout_rate
+            )
+            model = create_model(model_config)
+            logger.info(f"Successfully created {args.arch} model")
+        except Exception as e:
+            logger.error(f"Failed to create model '{args.arch}': {e}")
+            raise RuntimeError(f"Model creation failed: {e}") from e
+
+        # Move model to device using centralized device management
+        model = move_model_to_device(model, device, model_name=args.arch)
+        logger.info(f"Successfully moved model to device: {device}")
+
         # Auto-detect image size if not specified
         if args.img_size is None:
-            # Get image size from model info
-            from src.models import get_model_info
-            model_info = get_model_info(args.arch)
-            args.img_size = model_info.get('input_size', 224)
-            logger.info(f"Auto-detected image size for {args.arch}: {args.img_size}")
-        
-        # Create data loaders
+            try:
+                # Get image size from model info
+                from src.models import get_model_info
+                model_info = get_model_info(args.arch)
+                args.img_size = model_info.get('input_size', 224)
+                logger.info(f"Auto-detected image size for {args.arch}: {args.img_size}")
+            except Exception as e:
+                logger.warning(f"Failed to auto-detect image size, using default 224: {e}")
+                args.img_size = 224
+
+        # Create data loaders with error handling
         logger.info("Creating data loaders...")
-        train_loader, val_loader, test_loader = create_dataloaders(
-            data_root=args.data_root,
-            batch_size=args.batch_size,
-            img_size=args.img_size,
-            num_workers=args.num_workers,
-            val_split=args.val_split,
-            pin_memory=device.type == 'cuda'  # Enable pinned memory for GPU
-        )
+        try:
+            train_loader, val_loader, test_loader = create_dataloaders(
+                data_root=args.data_root,
+                batch_size=args.batch_size,
+                img_size=args.img_size,
+                num_workers=args.num_workers,
+                val_split=args.val_split,
+                pin_memory=device.type == 'cuda'  # Enable pinned memory for GPU
+            )
+            logger.info("Successfully created data loaders")
+        except Exception as e:
+            logger.error(f"Failed to create data loaders: {e}")
+            raise RuntimeError(f"Data loading failed: {e}") from e
         
         # Setup training
         criterion = nn.BCEWithLogitsLoss()
@@ -267,25 +293,30 @@ def main():
         )
         scheduler = ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
         
-        # Training loop
+        # Training loop with comprehensive error handling
         best_val_loss = float('inf')
         checkpoint_dir = Path(args.checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Early stopping variables
         patience_counter = 0
         early_stopped = False
-        
+
         history = {"train_losses": [], "val_losses": [], "train_accs": [], "val_accs": []}
-        
+
         logger.info(f"Starting training for {args.epochs} epochs (patience: {args.patience}, min_delta: {args.min_delta})")
-        
-        for epoch in range(1, args.epochs + 1):
-            start_time = time.time()
-            
-            # Train and validate
-            train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, device)
-            val_loss, val_acc = validate(model, val_loader, criterion, device)
+
+        try:
+            for epoch in range(1, args.epochs + 1):
+                start_time = time.time()
+
+                # Train and validate with error handling
+                try:
+                    train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, device)
+                    val_loss, val_acc = validate(model, val_loader, criterion, device)
+                except Exception as e:
+                    logger.error(f"Training/validation failed in epoch {epoch}: {e}")
+                    raise RuntimeError(f"Training failed in epoch {epoch}: {e}") from e
             
             # Update scheduler
             scheduler.step(val_loss)
@@ -322,36 +353,54 @@ def main():
                 early_stopped = True
                 break
         
-        # Load best model and evaluate on test set
-        logger.info("Loading best model for final test evaluation...")
-        model_filename = f"best_{args.arch}.pt"
-        model.load_state_dict(torch.load(checkpoint_dir / model_filename))
-        
-        # Evaluate on test set
-        logger.info("Evaluating on test set...")
-        test_loss, test_acc = evaluate(model, test_loader, criterion, device)
-        
-        logger.info(f"Final test results: loss={test_loss:.4f}, accuracy={test_acc:.3f}")
-        
-        # Save training history with architecture info and test results
-        history_filename = f"training_history_{args.arch}.json"
-        history["architecture"] = args.arch
-        history["img_size"] = args.img_size
-        history["pretrained"] = args.pretrained
-        history["test_loss"] = test_loss
-        history["test_acc"] = test_acc
-        history["early_stopped"] = early_stopped
-        history["final_epoch"] = len(history["train_losses"])
-        history["patience"] = args.patience
-        history["min_delta"] = args.min_delta
-        
-        with open(checkpoint_dir / history_filename, 'w') as f:
-            json.dump(history, f, indent=2)
-        
+            # Load best model and evaluate on test set with error handling
+            try:
+                logger.info("Loading best model for final test evaluation...")
+                model_filename = f"best_{args.arch}.pt"
+                model.load_state_dict(torch.load(checkpoint_dir / model_filename))
+                logger.info("Successfully loaded best model")
+
+                # Evaluate on test set
+                logger.info("Evaluating on test set...")
+                test_loss, test_acc = evaluate(model, test_loader, criterion, device)
+
+                logger.info(f"Final test results: loss={test_loss:.4f}, accuracy={test_acc:.3f}")
+
+                # Save training history with architecture info and test results
+                history_filename = f"training_history_{args.arch}.json"
+                history["architecture"] = args.arch
+                history["img_size"] = args.img_size
+                history["pretrained"] = args.pretrained
+                history["test_loss"] = test_loss
+                history["test_acc"] = test_acc
+                history["early_stopped"] = early_stopped
+                history["final_epoch"] = len(history["train_losses"])
+                history["patience"] = args.patience
+                history["min_delta"] = args.min_delta
+
+                with open(checkpoint_dir / history_filename, 'w') as f:
+                    json.dump(history, f, indent=2)
+                logger.info(f"Training history saved to {checkpoint_dir / history_filename}")
+
+            except Exception as e:
+                logger.error(f"Final evaluation or saving failed: {e}")
+                # Don't fail the entire training for post-training issues
+                logger.warning("Training completed but final evaluation failed")
+
+        except KeyboardInterrupt:
+            logger.info("Training interrupted by user")
+            raise
+        except Exception as e:
+            logger.error(f"Training loop failed: {e}")
+            raise RuntimeError(f"Training failed: {e}") from e
+
         model_filename = f"best_{args.arch}.pt"
         logger.info("Training completed successfully!")
         logger.info(f"Best model saved to: {checkpoint_dir / model_filename}")
-        
+
+    except KeyboardInterrupt:
+        logger.info("Training interrupted by user")
+        raise
     except Exception as e:
         logger.error(f"Training failed: {e}")
         raise

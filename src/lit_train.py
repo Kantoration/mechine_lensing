@@ -31,15 +31,13 @@ from pytorch_lightning.loggers import (
 )
 from pytorch_lightning.strategies import DDPStrategy
 
-from .lit_system import LitLensSystem, LitEnsembleSystem
-from .lit_datamodule import LensDataModule, LensWebDatasetDataModule
+from src.lit_system import LitLensSystem, LitEnsembleSystem
+from src.lit_datamodule import LensDataModule, LensWebDatasetDataModule
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Import centralized logging
+from src.utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def set_seed(seed: int = 42) -> None:
