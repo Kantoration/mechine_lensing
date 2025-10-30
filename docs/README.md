@@ -8,6 +8,8 @@
 
 A production-ready machine learning pipeline for detecting gravitational lenses in astronomical images using deep learning. This project implements both CNN (ResNet-18/34) and Vision Transformer (ViT) architectures with ensemble capabilities for robust lens classification.
 
+> Update (Oct 2025): Ensemble fusion is now performed in logit space using inverse-variance weights derived from MC-dropout uncertainty. A physics-informed variant augments weighting with per-sample physics losses and attention-derived signals. See `src/models/ensemble/weighted.py`, `src/models/ensemble/physics_informed_ensemble.py`, and `PHYSICS_INFORMED_ENSEMBLE_GUIDE.md`.
+
 ## 🌟 Key Features
 
 - **🎯 High Performance**: Achieves 93-96% accuracy on realistic synthetic datasets

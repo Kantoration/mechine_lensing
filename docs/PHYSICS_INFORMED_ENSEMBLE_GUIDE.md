@@ -4,6 +4,8 @@
 
 This guide explains how to implement and use the physics-informed ensemble system for gravitational lensing detection. The system combines traditional deep learning models with physics-informed attention mechanisms to achieve better performance and interpretability.
 
+> Update (Oct 2025): The ensemble fuses in logit space and computes weights from logits, logit-uncertainty (MC-dropout), and per-sample physics losses. A compact weighting network is available; a stable fallback uses inverse-uncertainty weighting with a physics penalty. Attention maps are optionally returned for analysis.
+
 ## 🏗️ Architecture
 
 ### Enhanced Light Transformer Components

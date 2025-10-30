@@ -122,6 +122,35 @@ make eval-ensemble
 make full-pipeline
 ```
 
+## 🧩 Ensemble Architecture and Uncertainty (Oct 2025)
+
+- **Uncertainty-weighted fusion (logit space)**: Members run MC-dropout; we compute mean/variance of logits per member, then fuse with inverse-variance weights for numerically stable aggregation. See `src/models/ensemble/weighted.py`.
+- **Physics-informed fusion**: Adds per-sample physics losses and attention-derived signals to weighting; optional small weighting net learns data-driven weights. See `src/models/ensemble/physics_informed_ensemble.py` and `docs/PHYSICS_INFORMED_ENSEMBLE_GUIDE.md`.
+- **Aleatoric indicators**: Post-hoc metrics (entropy, margin, Brier, logistic-normal CIs) from logits for calibration and active learning. See `src/analysis/aleatoric.py`.
+
+Minimal example (inference-time uncertainty):
+
+```python
+from src.models.ensemble.weighted import create_uncertainty_weighted_ensemble
+
+ensemble = create_uncertainty_weighted_ensemble(["resnet18", "vit_b_16"], bands=3)
+pred, var, weights = ensemble.mc_predict({
+    "resnet18": batch_64x64,  # resized per member internally if needed
+    "vit_b_16": batch_224x224,
+}, mc_samples=20)
+```
+
+Further reading:
+- Docs: `docs/PHYSICS_INFORMED_ENSEMBLE_GUIDE.md`, `docs/PARALLEL_INFERENCE_IMPROVEMENTS.md`
+- Validation: `docs/VALIDATION_FIXES_SUMMARY.md`, `src/validation/uncertainty_metrics.py`
+
+## 🧵 Data Pipeline (CSV → Tensor → Model)
+
+- **Dataset**: `src/datasets/lens_dataset.py` loads `<split>.csv` with `filepath,label`, applies ImageNet-normalized transforms and optional augmentation.
+- **Loaders**: `src/datasets/optimized_dataloader.py` builds train/val/test with pinned memory, persistent workers, and deterministic splits.
+- **Routing**: Ensembles accept a dict of inputs keyed by member name; members with different `input_size` are resized internally.
+
+
 ### ⚡ Lightning AI Cloud Training
 
 ```bash
@@ -1760,6 +1789,39 @@ make test
 - [🚀 Advanced Models Integration Guide](docs/ADVANCED_MODELS_INTEGRATION_GUIDE.md) - Future ensemble model integration
 - [🚀 Deployment Guide](docs/DEPLOYMENT_GUIDE.md) - Cloud deployment instructions
 - [🤝 Contributing](CONTRIBUTING.md) - Contribution guidelines
+
+---
+
+## LensGNN: Physics-Informed Graph Module
+
+For astronomers (high-level): LensGNN reconstructs the surface mass density (κ), lensing potential (ψ), and deflection field (α) directly from multi-band images. It enforces the lensing Poisson relation (∇²ψ ≈ 2κ) on a scale-aware pixel grid and provides calibrated uncertainty estimates. The model adapts to unlabeled survey data using physics-safe consistency learning, all in dimensionless units with correct pixel-scale handling.
+
+For developers (technical): LensGNN is a pure-PyTorch GNN with physics-guided attention over a grid graph (8-connected + optional ring). Operators (∇, ∇²) use LensingScale (dx,dy,factor) and boundary masking. Uncertainty is heteroscedastic (β‑NLL with clamped logσ² and variance floor) plus optional MC‑dropout. SSL uses teacher–student EMA, κ-only consistency, and variance-aware pseudo-labels with threshold schedule.
+
+Quick start:
+
+```bash
+# Train (Lightning, graph-based)
+python -c "from mlensing.gnn.datamodules import LensGNNDataModule; from mlensing.gnn.lightning_module import LensGNNLightning; import pytorch_lightning as pl; dm=LensGNNDataModule(batch_size=8); dm.setup(); sample=next(iter(dm.train_dataloader())); node_dim=sample['graph']['x'].shape[1]; model=LensGNNLightning(node_dim=node_dim, hidden_dim=128, mp_layers=4, heads=4, warmup_steps=2000, max_steps=10000, phase1_steps=2000, phase2_steps=3000, phase3_steps=5000); trainer=pl.Trainer(max_steps=10000, log_every_n_steps=50, precision=32); trainer.fit(model, dm)"
+
+# Toy SIE acceptance test (Poisson < 0.15 @ 500 iters)
+python scripts/run_toy_sie.py
+```
+
+Config highlights:
+- Graph: grid, patch_size=2, connectivity=8+ring, Fourier positional encodings, density caps with pruning
+- Physics: LensingScale (dx=dy in radians), BoundaryCondition (Neumann/Dirichlet/Periodic), border masking, edge-aware TV (γ≈2–3)
+- Schedule: Phase1 (2k) MSE+Poisson+TV → Phase2 (3k) β‑NLL → Phase3 (5k) α-direct warm-up 0→0.2, κ-only SSL, EMA teacher (m≈0.999)
+- Calibration: Var–Error ρ metrics, regression ECE/QQ (eval scripts), Poisson PSD overlays
+
+Registry & integration:
+- Architecture key: `lens_gnn` (graph-based)
+- Verifier: feed `{κ, α, (vars)}` via a verification head for ensembles
+
+Acceptance results (expected):
+- Toy SIE: Poisson residual < 0.15 at 500 iters
+- 100-sim: κ‑MAE < 0.05; Var–Error ρ > 0.4; no calibration alerts
+- Tiled vs full inference: MAE < 1e−3
 
 ## 🎓 Citation
 
