@@ -10,6 +10,91 @@ A production-ready machine learning pipeline for detecting gravitational lenses 
 
 ---
 
+## Table of Contents
+- [Quickstart (Physics-Aware)](#quickstart-physics-aware)
+- [Band Order & Normalization](#band-order--normalization)
+- [Physics Operators & Policies](#physics-operators--policies)
+- [Datasets & Loaders](#datasets--loaders)
+- [SSL Schedules & Knobs](#ssl-schedules--knobs)
+- [Tiled Inference](#tiled-inference)
+- [Running Tests](#running-tests)
+
+---
+
+## Quickstart (Physics-Aware)
+
+Minimal, end-to-end configs are provided in `examples/`.
+
+### FITS classification (CNN)
+```bash
+python src/lit_train.py --config examples/cnn_classification.yml
+```
+
+### LensGNN κ regression with SSL
+```bash
+python src/lit_train.py --config examples/lens_gnn_regression.yml
+```
+
+### Cluster tiling + stitched inference
+```bash
+python scripts/run_cluster_inference.py --config examples/cluster_tiled_inference.yml
+```
+
+Notes:
+- Always set `bands`, and either `pixel_scale_arcsec` or explicit `dx/dy`.
+- Choose `sigma_crit_policy: dimensionless|physical` per your units.
+- κ downsampling uses area-preserving pooling; α is re-derived from ψ.
+
+## Band Order & Normalization
+Use per-survey normalization (not ImageNet). Example:
+```yaml
+bands: [g, r, i]
+normalization:
+  g: {mean: 0.018, std: 0.012}
+  r: {mean: 0.020, std: 0.013}
+  i: {mean: 0.022, std: 0.014}
+```
+See `src/datasets/transforms.py`.
+
+## Physics Operators & Policies
+- Gauge: subtract mean κ in loss to remove arbitrary offset
+- Explicit spacing: `dx`, `dy` in radians for all operators
+- Borders: 1-pixel masked in Poisson loss to reduce padding bias
+- Resampling: κ/ψ via avg-pool; α recomputed from ψ after rescale
+Details: `docs/PHYSICS.md` and `mlensing/gnn/physics_ops.py`.
+
+## Datasets & Loaders
+- FITS: multi-HDU bands/maps/masks/PSF with rich meta (`pixel_scale_arcsec`, `dx/dy`, `z_l/z_s`, `sigma_crit`)
+- Cluster: tiling with overlap, coords grid, optional blending
+Details: `docs/DATASETS.md`, `src/datasets/lens_fits_dataset.py`, `src/datasets/cluster_lensing.py`.
+
+## SSL Schedules & Knobs
+- `unlabeled_ratio_cap`, `consistency_warmup`, `pseudo_thresh_start/min`
+- Teacher: eval (no dropout). Student: dropout on (MC if enabled)
+Details: `docs/SSL.md`, `mlensing/gnn/lightning_module.py`.
+
+## Tiled Inference
+Use Hanning blending and overlap (~1/4 tile). API:
+```python
+from mlensing.gnn.inference_utils import predict_full, predict_tiled
+```
+Equivalence: κ MAE < 1e-3 vs full-frame for stable models.
+Details: `docs/TILED_INFERENCE.md`.
+
+## Running Tests
+```bash
+pytest -q tests/test_operators_anisotropic.py \
+       tests/test_fits_loader_meta.py \
+       tests/test_ssl_schedule.py \
+       tests/test_kappa_pooling_area.py \
+       tests/test_tiled_inference_equiv.py \
+       tests/test_sie_smoke.py
+```
+
+For contract details see `docs/CONTRACTS.md`. For a complete overview of prior content, see sections below.
+
+---
+
 ## 📊 **REPOSITORY STATUS: PRODUCTION-READY WITH STATE-OF-THE-ART ENHANCEMENTS**
 
 ### 🚀 **Major Updates (October 2025)**

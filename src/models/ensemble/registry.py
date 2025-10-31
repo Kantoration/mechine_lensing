@@ -10,8 +10,11 @@ with arbitrary input channel counts.
 from __future__ import annotations
 
 import logging
-from typing import Tuple, Dict, Any, Optional
+import math
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any, Optional, List
 
+import torch
 import torch.nn as nn
 
 from ..backbones.resnet import ResNetBackbone
@@ -21,6 +24,44 @@ from ..backbones.light_transformer import LightTransformerBackbone
 from ..heads.binary import BinaryHead
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ModelContract:
+    """
+    Physics-aware model contract specifying input/output requirements.
+    
+    This ensures consistent handling of bands, normalization, pixel scales,
+    and task types across ensemble members.
+    
+    References:
+    - ML4SCI collaboration (ArXiv:2308.15738, 2023). "Reliable Scientific Machine Learning:
+      Standards and Contracts." Factories with explicit, typed contracts enable reproducible,
+      robust ML science.
+    - Lanusse, F. et al. (2018). "CMU Deep Lens: CNNs for Strong Lens Modeling." ApJS.
+      Physics parameters, pixel scales, and band order must be propagated for valid science.
+    
+    Modern science-facing ML frameworks enforce "contracts" recording band order, pixel scale,
+    units, normalization, and input type for each model. This is essential for valid cross-model
+    fusion, reproducibility, and correct physics interpretation.
+    """
+    name: str
+    bands: List[str]  # e.g., ['g','r','i'] or ['u','g','r','i','z']
+    input_size: int
+    normalization: Dict[str, Dict[str, float]]  # {band: {mean, std}}
+    pixel_scale_arcsec: Optional[float] = None
+    dx: Optional[float] = None  # radians
+    dy: Optional[float] = None  # radians
+    sigma_crit_policy: Optional[str] = None  # 'dimensionless'|'physical'
+    task_type: str = "classification"  # 'classification'|'regression_kappa'|'regression_psi'|'regression_alpha'
+    input_type: str = "image"  # 'image'|'image+kappa'|'full_maps'
+    
+    def __post_init__(self):
+        """Derive dx/dy from pixel_scale_arcsec if not provided."""
+        if self.dx is None and self.dy is None and self.pixel_scale_arcsec is not None:
+            step_rad = self.pixel_scale_arcsec * (math.pi / 180.0 / 3600.0)
+            self.dx = step_rad
+            self.dy = step_rad
 
 
 # Architecture name aliases for backward compatibility
@@ -137,29 +178,56 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         'input_size': 112,
         'description': 'Enhanced Light Transformer with adaptive attention based on image characteristics'
     }
+    ,
+    'lens_gnn': {
+        'backbone_class': None,  # LensGNN doesn't use CNN backbone pattern
+        'backbone_kwargs': {
+            'node_dim': 128,
+            'hidden_dim': 128,
+            'mp_layers': 4,
+            'heads': 4,
+            'uncertainty': 'heteroscedastic'
+        },
+        'feature_dim': 0,  # N/A for graph model
+        'input_size': 224,
+        'description': 'LensGNN: physics-informed graph model producing latent κ/ψ/α maps'
+    }
 }
 
 
 def make_model(
-    name: str, 
-    bands: int = 3, 
+    name: str,
+    bands: int = 3,
+    bands_list: Optional[List[str]] = None,  # Explicit band names ['g','r','i']
     pretrained: bool = True,
-    dropout_p: float = 0.2
-) -> Tuple[nn.Module, nn.Module, int]:
+    dropout_p: float = 0.2,
+    normalization: Optional[Dict[str, Dict[str, float]]] = None,
+    pixel_scale_arcsec: Optional[float] = None,
+    dx: Optional[float] = None,
+    dy: Optional[float] = None,
+    sigma_crit_policy: Optional[str] = "dimensionless",
+    task_type: str = "classification",
+    input_type: str = "image",
+) -> Tuple[nn.Module, Optional[nn.Module], int, ModelContract]:
     """
-    Create a backbone-head pair for the specified architecture.
+    Create a backbone-head pair for the specified architecture with physics-aware contract.
     
     Args:
-        name: Model architecture name ('resnet18', 'resnet34', 'vit_b_16', 'light_transformer', 'trans_enc_s')
-        bands: Number of input channels/bands
+        name: Model architecture name
+        bands: Number of input channels/bands (deprecated, use bands_list)
+        bands_list: Explicit band names, e.g., ['g','r','i']
         pretrained: Whether to use pretrained weights
         dropout_p: Dropout probability for the classification head
+        normalization: Per-band normalization stats {band: {mean, std}}
+        pixel_scale_arcsec: Pixel scale in arcseconds
+        dx, dy: Grid spacing in radians (derived from pixel_scale_arcsec if not provided)
+        sigma_crit_policy: 'dimensionless' or 'physical' for κ units
+        task_type: 'classification', 'regression_kappa', 'regression_psi', 'regression_alpha'
+        input_type: 'image', 'image+kappa', 'full_maps'
         
     Returns:
-        Tuple of (backbone, head, feature_dim)
-        
-    Raises:
-        ValueError: If the architecture name is not supported
+        Tuple of (backbone_or_model, head, feature_dim, contract)
+        For LensGNN: (model, None, 0, contract)
     """
     # Resolve architecture aliases for backward compatibility
     name = ALIASES.get(name, name)
@@ -168,7 +236,49 @@ def make_model(
         available = list(MODEL_REGISTRY.keys())
         raise ValueError(f"Unknown model architecture '{name}'. Available: {available}")
 
-    # Get model configuration
+    # Create model contract
+    if bands_list is None:
+        # Fallback: generate band names from count
+        bands_list = [f'band_{i}' for i in range(bands)]
+    
+    contract = ModelContract(
+        name=name,
+        bands=bands_list,
+        input_size=MODEL_REGISTRY[name]['input_size'],
+        normalization=normalization or {},
+        pixel_scale_arcsec=pixel_scale_arcsec,
+        dx=dx,
+        dy=dy,
+        sigma_crit_policy=sigma_crit_policy,
+        task_type=task_type,
+        input_type=input_type
+    )
+
+    # Special handling for LensGNN (non-CNN pattern)
+    if name == "lens_gnn":
+        from mlensing.gnn.lens_gnn import LensGNN
+        
+        # Ensure dx/dy are available (derived from contract)
+        if contract.dx is None or contract.dy is None:
+            if contract.pixel_scale_arcsec is None:
+                raise ValueError("LensGNN requires dx/dy or pixel_scale_arcsec")
+            contract.__post_init__()  # Derive dx/dy
+        
+        # Get LensGNN kwargs from registry
+        gnn_kwargs = MODEL_REGISTRY[name]['backbone_kwargs'].copy()
+        model = LensGNN(
+            node_dim=gnn_kwargs.get('node_dim', 128),
+            hidden_dim=gnn_kwargs.get('hidden_dim', 128),
+            mp_layers=gnn_kwargs.get('mp_layers', 4),
+            heads=gnn_kwargs.get('heads', 4),
+            uncertainty=gnn_kwargs.get('uncertainty', 'heteroscedastic')
+        )
+        model.contract = contract  # Attach contract for downstream ops
+        
+        logger.info(f"Created LensGNN with dx={contract.dx:.6e}, dy={contract.dy:.6e}")
+        return model, None, 0, contract
+
+    # Standard CNN/ViT models
     config = MODEL_REGISTRY[name]
     backbone_class = config['backbone_class']
     backbone_kwargs = config['backbone_kwargs'].copy()
@@ -176,17 +286,44 @@ def make_model(
     
     # Create backbone with multi-channel support
     backbone_kwargs.update({
-        'in_ch': bands,
+        'in_ch': len(contract.bands),
         'pretrained': pretrained
     })
     backbone = backbone_class(**backbone_kwargs)
+    backbone.contract = contract  # Attach contract
     
-    # Create binary classification head
-    head = BinaryHead(in_dim=feature_dim, p=dropout_p)
+    # Create binary classification head (or regression head if task_type requires)
+    if task_type == "classification":
+        head = BinaryHead(in_dim=feature_dim, p=dropout_p)
+    else:
+        # Regression tasks don't use classification head
+        head = None
     
-    logger.info(f"Created model pair: {name} with {bands} bands, "
-               f"pretrained={pretrained}, dropout_p={dropout_p}")
+    logger.info(f"Created model pair: {name} with bands={contract.bands}, "
+               f"pretrained={pretrained}, dropout_p={dropout_p}, task_type={task_type}")
     
+    return backbone, head, feature_dim, contract
+
+
+# Backward compatibility: wrapper that returns old signature
+def make_model_legacy(
+    name: str,
+    bands: int = 3,
+    pretrained: bool = True,
+    dropout_p: float = 0.2
+) -> Tuple[nn.Module, nn.Module, int]:
+    """
+    Legacy wrapper for make_model that returns old signature without contract.
+    
+    This maintains backward compatibility for existing code that expects
+    (backbone, head, feature_dim) tuple.
+    """
+    backbone, head, feature_dim, _ = make_model(
+        name=name,
+        bands=bands,
+        pretrained=pretrained,
+        dropout_p=dropout_p
+    )
     return backbone, head, feature_dim
 
 

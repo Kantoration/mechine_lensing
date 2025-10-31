@@ -131,6 +131,13 @@ class UnifiedModelFactory:
                 "outputs": "logits",
                 "description": "Vision Transformer B/16"
             },
+            "lens_gnn": {
+                "type": "single",
+                "supports_physics": True,
+                "input_size": 224,
+                "outputs": "latent_maps",
+                "description": "LensGNN: reconstructs psi/kappa/alpha from images via GNN"
+            },
             
             # Enhanced models with physics support
             "enhanced_light_transformer_arc_aware": {
@@ -210,6 +217,15 @@ class UnifiedModelFactory:
                 except Exception as e:
                     logger.error(f"Failed to create enhanced model backbone '{architecture}': {e}")
                     raise ValueError(f"Enhanced model backbone creation failed for '{architecture}': {e}") from e
+            elif architecture == "lens_gnn":
+                # Create LensGNN system (expects graph dict input)
+                try:
+                    from mlensing.gnn.lens_gnn import LensGNN
+                    # node_dim must be supplied by caller at runtime; provide a minimal stub configured for later
+                    model = LensGNN(node_dim=128)
+                    logger.info("Created LensGNN (graph-based). Ensure graph_builder provides node_dim at runtime.")
+                except Exception as e:
+                    raise ValueError(f"Failed to create LensGNN: {e}") from e
             else:
                 # Use ensemble registry for standard models
                 try:

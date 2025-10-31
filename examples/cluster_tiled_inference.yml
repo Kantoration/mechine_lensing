@@ -1,0 +1,12 @@
+data:
+  dataset: cluster
+  csv: data/cluster_index.csv
+  tile_size: 512
+  overlap: 32
+  transforms:
+    jitter: false
+
+inference:
+  tiling:
+    window: hanning
+    expect_equivalence_mae: 1.0e-3

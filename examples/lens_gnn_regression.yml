@@ -1,0 +1,27 @@
+models:
+  - name: lens_gnn
+    bands: [g, r, i]
+    input_size: 224
+    pixel_scale_arcsec: 0.1
+    normalization:
+      g: {mean: 0.018, std: 0.012}
+      r: {mean: 0.020, std: 0.013}
+      i: {mean: 0.022, std: 0.014}
+    task_type: regression_kappa
+    sigma_crit_policy: dimensionless
+    input_type: full_maps
+
+data:
+  dataset: fits
+  train_csv: data/train_fits_with_maps.csv
+  val_csv: data/val_fits_with_maps.csv
+  band_hdus: {g: 0, r: 1, i: 2}
+  map_hdus: {kappa: 4, psi: 5}
+  transforms:
+    jitter: false
+
+ssl:
+  unlabeled_ratio_cap: 0.30
+  consistency_warmup: 5
+  pseudo_thresh_start: 0.95
+  pseudo_thresh_min: 0.85

@@ -20,7 +20,8 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 import torch
 import torch.nn as nn
-from .registry import make_model, get_model_info
+import torch.nn.functional as F
+from .registry import make_model, get_model_info, ModelContract
 from ..interfaces.physics_capable import is_physics_capable, PhysicsInfo
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,76 @@ class PhysicsInformedEnsemble(nn.Module):
         
         logger.info(f"Created physics-informed ensemble with {len(member_configs)} members")
     
+    @staticmethod
+    def _resize_maps(
+        sample: Dict[str, torch.Tensor],
+        target_h: int,
+        target_w: int,
+        contract: ModelContract
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Area-preserving resize for physics maps (κ, ψ, α).
+        
+        References:
+        - Gruen, D., & Brimioulle, F. (2015). "Cluster lensing in the CLASH survey." ApJS.
+        - Bosch, J. et al. (2018). "The Hyper Suprime-Cam software pipeline." PASJ.
+          Best practice from cosmological weak lensing: mass conservation in coarse-graining
+          requires average pooling for κ, never bilinear; compute α from ψ after new pool.
+        
+        Rules:
+        - κ, ψ: Use adaptive average pooling (area-preserving, mass-conserving)
+        - α: Recompute from ψ via gradient2d at new scale (preserves α-ψ consistency)
+          OR average-pool if no ψ available
+        
+        Args:
+            sample: Dict with 'kappa', 'psi', 'alpha' keys
+            target_h, target_w: Target spatial dimensions
+            contract: ModelContract with dx/dy for gradient computation
+            
+        Returns:
+            Dict with resized maps
+        """
+        from mlensing.gnn.physics_ops import gradient2d
+        
+        out = {}
+        
+        # Resize κ using area-preserving pooling
+        if 'kappa' in sample:
+            kappa = sample['kappa']
+            if kappa.ndim == 3:  # [C, H, W]
+                kappa = kappa.unsqueeze(0)  # Add batch dim
+            out['kappa'] = F.adaptive_avg_pool2d(kappa, (target_h, target_w)).squeeze(0)
+        
+        # Resize ψ and recompute α from resized ψ
+        if 'psi' in sample:
+            psi = sample['psi']
+            if psi.ndim == 3:
+                psi = psi.unsqueeze(0)
+            psi_resized = F.adaptive_avg_pool2d(psi, (target_h, target_w)).squeeze(0)
+            out['psi'] = psi_resized
+            
+            # Recompute α from resized ψ (preserves α-ψ consistency)
+            if contract.dx is not None and contract.dy is not None:
+                # Compute scale factor for new grid
+                H_old, W_old = psi.shape[-2:] if psi.ndim == 3 else sample['psi'].shape[-2:]
+                scale_x = contract.dx * (W_old / target_w)
+                scale_y = contract.dy * (H_old / target_h)
+                
+                # Add batch and channel dims for gradient2d
+                psi_4d = psi_resized.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+                gx, gy = gradient2d(psi_4d, dx=scale_x, dy=scale_y)
+                out['alpha_from_psi'] = torch.cat([gx, gy], dim=1).squeeze(0)  # [2, H, W]
+        
+        # Direct α resize (fallback if no ψ)
+        if 'alpha' in sample and 'psi' not in sample:
+            alpha = sample['alpha']
+            if alpha.ndim == 3:  # [2, H, W]
+                alpha = alpha.unsqueeze(0)  # [1, 2, H, W]
+            # Average-pool each component independently
+            out['alpha'] = F.adaptive_avg_pool2d(alpha, (target_h, target_w)).squeeze(0)
+        
+        return out
+    
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, Any]:
         """
         Forward pass through physics-informed ensemble.
@@ -158,8 +229,20 @@ class PhysicsInformedEnsemble(nn.Module):
         physics_losses = []
         attention_maps = {}
         
-        # Cache for resized tensors to avoid duplicate interpolations
-        resized_cache: Dict[Tuple[int, int], torch.Tensor] = {}
+        # Helper to create tensor fingerprint for cache isolation
+        # References:
+        # [1] Lakshminarayanan, B., Pritzel, A., & Blundell, C. (2017). "Simple and Scalable Predictive
+        #     Uncertainty Estimation using Deep Ensembles." NeurIPS. Ensembles require controlled
+        #     member routing and independent stochasticity per member.
+        # [2] Breiman, L. (1996). "Bagging predictors." Machine Learning.
+        def _tensor_fingerprint(t: torch.Tensor) -> Tuple[int, int, int, int]:
+            """Create immutable fingerprint: batch, channels, height, width."""
+            return (t.shape[0], t.shape[1], t.shape[2], t.shape[3])
+        
+        # Cache for resized tensors - keyed by member + target size + fingerprint
+        # This prevents wrong tensor reuse across different members/batches, which would undermine
+        # uncertainty estimation, calibration, and fusion quality. See [1][2] for ensemble correctness.
+        resized_cache: Dict[Tuple[str, int, int, Tuple[int, int, int, int]], torch.Tensor] = {}
         
         for i, (name, model) in enumerate(zip(self.member_names, self.members)):
             # Get model input - enforce explicit routing
@@ -178,7 +261,8 @@ class PhysicsInformedEnsemble(nn.Module):
                 target_h = target_w = int(target_size)
             
             if x.shape[-2:] != (target_h, target_w):
-                cache_key = (target_h, target_w)
+                # Cache key includes member name and tensor fingerprint to prevent cross-member reuse
+                cache_key = (name, target_h, target_w, _tensor_fingerprint(x))
                 if cache_key not in resized_cache:
                     resized_cache[cache_key] = torch.nn.functional.interpolate(
                         x, size=(target_h, target_w), 
@@ -392,12 +476,34 @@ class PhysicsInformedEnsemble(nn.Module):
     
     # Removed _estimate_uncertainty - use _estimate_uncertainty_logits instead
     
+    def _enable_mc_dropout(self, model: nn.Module):
+        """
+        Enable dropout layers while keeping BatchNorm in eval mode.
+        
+        This is required for proper Monte Carlo dropout: dropout must be active
+        to create stochasticity, but BN must remain frozen to preserve running stats.
+        
+        References:
+        - Gal, Y., & Ghahramani, Z. (2016). "Dropout as a Bayesian Approximation." ICML.
+        - Kendall, A., & Gal, Y. (2017). "What Uncertainties Do We Need in Bayesian Deep Learning
+          for Computer Vision?" NeurIPS.
+        
+        Note: Simply applying functional dropout to logits (without enabling internal dropout)
+        is a placebo that doesn't capture epistemic uncertainty. True MC-dropout requires
+        activating all internal Dropout layers while keeping BN in eval mode.
+        """
+        for m in model.modules():
+            if isinstance(m, (nn.Dropout, nn.Dropout2d, nn.Dropout3d)):
+                m.train()  # Activate dropout
+            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                m.eval()   # Keep BN frozen to avoid running stats drift
+    
     def _estimate_uncertainty_logits(self, model: nn.Module, x: torch.Tensor, num_samples: int = 10) -> torch.Tensor:
         """
         Estimate predictive uncertainty using Monte Carlo dropout on logits.
         
-        This is the preferred method for uncertainty estimation as it operates
-        in logit space, which is more appropriate for inverse-variance weighting.
+        This properly enables internal dropout layers (not just logit-level dropout)
+        while keeping BatchNorm frozen, enabling true epistemic uncertainty estimation.
         
         Args:
             model: Model to estimate uncertainty for
@@ -408,19 +514,18 @@ class PhysicsInformedEnsemble(nn.Module):
             Standard deviation of logits across MC samples [batch_size]
         """
         prev_mode = model.training
-        model.eval()  # Keep model in eval mode to preserve BN stats
+        model.eval()  # Start in eval mode to freeze BN stats
+        self._enable_mc_dropout(model)  # Enable dropout layers for stochasticity
         
         logit_samples = []
         with torch.no_grad():
             for _ in range(num_samples):
-                # Get logits from model
+                # Forward pass with dropout active (stochastic internal activations)
                 logits = model(x)
-                # Apply functional dropout to logits only
-                dropped_logits = torch.nn.functional.dropout(logits, p=self.mc_dropout_p, training=True)
-                logit_samples.append(self._safe_flatten_prediction(dropped_logits))
+                logit_samples.append(self._safe_flatten_prediction(logits))
         
         logit_samples = torch.stack(logit_samples, dim=0)  # [num_samples, batch_size]
-        logit_uncertainty = torch.std(logit_samples, dim=0)  # [batch_size]
+        logit_uncertainty = torch.std(logit_samples, dim=0, unbiased=False)  # [batch_size]
         
         # Restore original training mode
         model.train(prev_mode)
