@@ -7,7 +7,6 @@ across the entire codebase, ensuring consistent reproducibility.
 
 from __future__ import annotations
 
-import logging
 import random
 from typing import Optional
 
@@ -35,8 +34,7 @@ class SeedManager:
             deterministic: Enable deterministic behavior (slower but fully reproducible)
         """
         # Avoid redundant operations
-        if (self._seed_cache == seed and
-            self._deterministic_cache == deterministic):
+        if self._seed_cache == seed and self._deterministic_cache == deterministic:
             logger.debug(f"Seed {seed} already set, skipping")
             return
 
@@ -64,7 +62,9 @@ class SeedManager:
             logger.info("Enabled deterministic training mode")
         else:
             if torch.cuda.is_available():
-                torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
+                torch.backends.cudnn.benchmark = (
+                    True  # Optimize for consistent input sizes
+                )
 
         logger.info(f"Set random seed to {seed}, deterministic={deterministic}")
 
@@ -151,9 +151,12 @@ class SeedContext:
 
 def with_seed(seed: int = 42, deterministic: bool = False):
     """Decorator for functions that need specific seed settings."""
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             with SeedContext(seed, deterministic):
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator

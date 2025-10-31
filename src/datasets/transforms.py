@@ -48,6 +48,8 @@ def make_survey_transforms(
 
     if jitter:
         # Conservative jitter magnitudes; off by default
-        tf_list.insert(0, T.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.05, hue=0.01))
+        tf_list.insert(
+            0, T.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.05, hue=0.01)
+        )
 
     return T.Compose(tf_list)

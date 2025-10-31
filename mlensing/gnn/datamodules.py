@@ -33,7 +33,9 @@ class _MockLensDataset(Dataset):
 
 
 class LensGNNDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size: int = 4, num_workers: int = 0, pixel_scale_arcsec: float = 0.1) -> None:
+    def __init__(
+        self, batch_size: int = 4, num_workers: int = 0, pixel_scale_arcsec: float = 0.1
+    ) -> None:
         super().__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -46,11 +48,12 @@ class LensGNNDataModule(pl.LightningDataModule):
     def _collate(self, batch_list: list[Dict]) -> Dict:
         """
         Collate function that preserves metadata as a list.
-        
+
         This ensures meta dicts are not lost during batching and remain
         accessible for per-sample operations (e.g., Σcrit normalization).
         """
         images = torch.stack([b["image"] for b in batch_list])
+
         # Weak/strong astro-safe augmentations (simple rot/flip/shift)
         def weak_aug(x: torch.Tensor) -> torch.Tensor:
             y = x
@@ -65,7 +68,11 @@ class LensGNNDataModule(pl.LightningDataModule):
             y = weak_aug(x)
             if torch.rand(1).item() < 0.3:
                 shift = torch.randint(-2, 3, (2,))
-                y = torch.roll(y, shifts=(int(shift[0].item()), int(shift[1].item())), dims=(-2, -1))
+                y = torch.roll(
+                    y,
+                    shifts=(int(shift[0].item()), int(shift[1].item())),
+                    dims=(-2, -1),
+                )
             return y
 
         images_weak = torch.stack([weak_aug(b["image"]) for b in batch_list])
@@ -77,28 +84,45 @@ class LensGNNDataModule(pl.LightningDataModule):
             first_meta = batch_list[0]["meta"]
             if "pixel_scale_arcsec" in first_meta:
                 from .physics_ops import PhysicsScale
-                ps = PhysicsScale(pixel_scale_arcsec=float(first_meta["pixel_scale_arcsec"]))
 
-        graph = build_grid_graph(images, patch_size=2, connectivity="8+ring", physics_scale=ps)
-        graph_weak = build_grid_graph(images_weak, patch_size=2, connectivity="8+ring", physics_scale=ps)
+                ps = PhysicsScale(
+                    pixel_scale_arcsec=float(first_meta["pixel_scale_arcsec"])
+                )
+
+        graph = build_grid_graph(
+            images, patch_size=2, connectivity="8+ring", physics_scale=ps
+        )
+        graph_weak = build_grid_graph(
+            images_weak, patch_size=2, connectivity="8+ring", physics_scale=ps
+        )
         out: Dict = {"graph": graph, "graph_weak": graph_weak, "image": images}
-        
+
         # Targets resized to grid are assumed prepared upstream; here just pass if present
         if "kappa" in batch_list[0]:
             out["target"] = {"kappa": torch.stack([b["kappa"] for b in batch_list])}
             if "alpha" in batch_list[0]:
                 out["target"]["alpha"] = torch.stack([b["alpha"] for b in batch_list])
-        
+
         # Preserve meta as list (one dict per sample)
         if "meta" in batch_list[0]:
             out["meta"] = [b.get("meta") for b in batch_list]
-        
+
         return out
 
     def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.train_ds, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, collate_fn=self._collate)
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            collate_fn=self._collate,
+        )
 
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self.val_ds, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=self._collate)
-
-
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            collate_fn=self._collate,
+        )

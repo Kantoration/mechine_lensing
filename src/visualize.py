@@ -28,7 +28,12 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import (
+    roc_curve,
+    roc_auc_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+)
 
 
 def _load_predictions(pred_csv: Path) -> pd.DataFrame:
@@ -41,17 +46,21 @@ def _load_predictions(pred_csv: Path) -> pd.DataFrame:
         for k, v in cols.items():
             if k == name:
                 return v
-        raise ValueError(f"Column '{name}' not found in {pred_csv}. Found: {list(df.columns)}")
+        raise ValueError(
+            f"Column '{name}' not found in {pred_csv}. Found: {list(df.columns)}"
+        )
 
     y_true_col = pick("y_true")
     y_prob_col = pick("y_prob")
     # y_pred sometimes not saved; we can compute at 0.5 if missing
     y_pred_col = cols.get("y_pred")
 
-    out = pd.DataFrame({
-        "y_true": df[y_true_col].astype(int),
-        "y_prob": df[y_prob_col].astype(float),
-    })
+    out = pd.DataFrame(
+        {
+            "y_true": df[y_true_col].astype(int),
+            "y_prob": df[y_prob_col].astype(float),
+        }
+    )
     if y_pred_col:
         out["y_pred"] = df[y_pred_col].astype(int)
     else:
@@ -84,8 +93,10 @@ def _attach_filepaths(preds: pd.DataFrame, data_root: Path) -> pd.DataFrame:
     if len(test_df) != len(preds):
         # Fall back to inner join on y_true positions (not ideal)
         # but usually eval kept the original test order → lengths match.
-        raise ValueError("Row count mismatch between predictions and test.csv; "
-                         "rerun eval so ordering matches test.csv.")
+        raise ValueError(
+            "Row count mismatch between predictions and test.csv; "
+            "rerun eval so ordering matches test.csv."
+        )
     preds = preds.copy()
     preds["filepath"] = test_df["filepath"].astype(str)
     return preds
@@ -135,7 +146,9 @@ def _make_grid(images: list[np.ndarray], cols: int = 4, pad: int = 2) -> np.ndar
 
     h, w, c = images[0].shape
     rows = int(np.ceil(len(images) / cols))
-    grid = np.ones((rows * h + (rows - 1) * pad, cols * w + (cols - 1) * pad, c), dtype=np.float32)
+    grid = np.ones(
+        (rows * h + (rows - 1) * pad, cols * w + (cols - 1) * pad, c), dtype=np.float32
+    )
 
     grid[:] = 1.0  # white background
     idx = 0
@@ -145,13 +158,20 @@ def _make_grid(images: list[np.ndarray], cols: int = 4, pad: int = 2) -> np.ndar
                 break
             y0 = r * (h + pad)
             x0 = cl * (w + pad)
-            grid[y0:y0 + h, x0:x0 + w] = images[idx]
+            grid[y0 : y0 + h, x0 : x0 + w] = images[idx]
             idx += 1
     return grid
 
 
-def save_example_grid(df: pd.DataFrame, mask: np.ndarray, data_root: Path,
-                      out_path: Path, title: str, max_n: int = 16, size: int = 96) -> int:
+def save_example_grid(
+    df: pd.DataFrame,
+    mask: np.ndarray,
+    data_root: Path,
+    out_path: Path,
+    title: str,
+    max_n: int = 16,
+    size: int = 96,
+) -> int:
     idxs = np.where(mask)[0][:max_n].tolist()
     if not idxs:
         return 0
@@ -183,8 +203,12 @@ def save_example_grid(df: pd.DataFrame, mask: np.ndarray, data_root: Path,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", type=str, default="data_scientific_test")
-    ap.add_argument("--predictions", type=str, required=True,
-                    help="Path to predictions CSV (test_probs.csv or detailed_predictions.csv)")
+    ap.add_argument(
+        "--predictions",
+        type=str,
+        required=True,
+        help="Path to predictions CSV (test_probs.csv or detailed_predictions.csv)",
+    )
     args = ap.parse_args()
 
     data_root = Path(args.data_root)
@@ -223,10 +247,19 @@ def main():
         "tn": (y_true == 0) & (y_pred == 0),
     }
     for name, m in masks.items():
-        saved = save_example_grid(preds, m, data_root, results_dir / f"{name}_grid.png",
-                                  title=name.upper(), max_n=16, size=96)
+        saved = save_example_grid(
+            preds,
+            m,
+            data_root,
+            results_dir / f"{name}_grid.png",
+            title=name.upper(),
+            max_n=16,
+            size=96,
+        )
         if saved > 0:
-            print(f"Saved {name.upper()} grid ({saved} images) → results/{name}_grid.png")
+            print(
+                f"Saved {name.upper()} grid ({saved} images) → results/{name}_grid.png"
+            )
         else:
             print(f"No samples to plot for {name.upper()} grid.")
 

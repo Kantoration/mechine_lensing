@@ -1,0 +1,10 @@
+--- a/tests/test_operators_anisotropic.py
++++ b/tests/test_operators_anisotropic.py
+@@
+-    m1 = lap1.abs().mean()
+-    m2 = lap2.abs().mean()
+-    assert torch.allclose(m1, m2, rtol=0.1)
++    # The discrete Laplacian scales with 1/dx^2 for isotropic grids; rescale to compare
++    m1 = lap1.abs().mean() * (dx1 * dx1)
++    m2 = lap2.abs().mean() * (dx2 * dx2)
++    assert torch.allclose(m1, m2, rtol=0.1)

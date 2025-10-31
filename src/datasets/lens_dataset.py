@@ -28,17 +28,34 @@ class LensDatasetError(Exception):
     """Raised when the dataset cannot be initialised or accessed correctly."""
 
 
+def _get_default_astronomy_norm(num_bands: int = 3) -> tuple[list[float], list[float]]:
+    """Default astronomy normalization: zero-mean, unit-variance per band.
+
+    For astronomy pipelines, we default to unit normalization when survey stats
+    are not available. This preserves flux calibration unlike ImageNet defaults.
+    """
+    # Zero mean, unit std per band (conservative for astronomy data)
+    means = [0.0] * num_bands
+    stds = [1.0] * num_bands
+    return means, stds
+
+
 @dataclass
 class _TransformsConfig:
     img_size: int
     augment: bool
+    use_color_jitter: bool = False  # Opt-in only (default OFF for physics integrity)
 
     def build(self) -> Callable[[Image.Image], torch.Tensor]:
-        """Create the torchvision transformation pipeline."""
+        """Create the torchvision transformation pipeline with survey-aware normalization."""
+        # Use default astronomy normalization (zero-mean, unit-variance)
+        # Replace with survey-specific stats from ModelContract/dataset metadata when available
+        means, stds = _get_default_astronomy_norm(num_bands=3)
+
         base_transforms = [
             T.Resize((self.img_size, self.img_size)),
             T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            T.Normalize(mean=means, std=stds),
         ]
 
         if not self.augment:
@@ -48,9 +65,13 @@ class _TransformsConfig:
             T.RandomHorizontalFlip(p=0.5),
             T.RandomVerticalFlip(p=0.5),
             T.RandomRotation(degrees=15),
-            T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             T.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
         ]
+        # Color jitter only if explicitly enabled (default OFF)
+        if self.use_color_jitter:
+            aug_transforms.append(
+                T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
+            )
         return T.Compose(aug_transforms + base_transforms)
 
 
@@ -73,12 +94,16 @@ class LensDataset(Dataset[Tuple[torch.Tensor, int]]):
         self.validate_paths = bool(validate_paths)
 
         if not self.data_root.exists():
-            raise LensDatasetError(f"Data root directory does not exist: {self.data_root}")
+            raise LensDatasetError(
+                f"Data root directory does not exist: {self.data_root}"
+            )
 
         csv_name = self._resolve_split_name(self.split)
         csv_path = self.data_root / f"{csv_name}.csv"
         if not csv_path.exists():
-            raise LensDatasetError(f"CSV manifest not found for split '{self.split}': {csv_path}")
+            raise LensDatasetError(
+                f"CSV manifest not found for split '{self.split}': {csv_path}"
+            )
 
         try:
             df = pd.read_csv(csv_path)
@@ -107,7 +132,9 @@ class LensDataset(Dataset[Tuple[torch.Tensor, int]]):
         if self.validate_paths:
             self._validate_manifest_paths()
 
-        self.transform = transform or _TransformsConfig(self.img_size, self.augment).build()
+        self.transform = (
+            transform or _TransformsConfig(self.img_size, self.augment).build()
+        )
         logger.info("Loaded %d samples for split '%s'", len(self.df), self.split)
 
     # ------------------------------------------------------------------
@@ -137,7 +164,9 @@ class LensDataset(Dataset[Tuple[torch.Tensor, int]]):
                     break
         if missing:
             hint = ", ".join(missing)
-            raise LensDatasetError(f"Missing image files (first {len(missing)} shown): {hint}")
+            raise LensDatasetError(
+                f"Missing image files (first {len(missing)} shown): {hint}"
+            )
 
     # ------------------------------------------------------------------
     def __len__(self) -> int:
@@ -145,7 +174,9 @@ class LensDataset(Dataset[Tuple[torch.Tensor, int]]):
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, int]:
         if index < 0 or index >= len(self.df):
-            raise IndexError(f"Index {index} out of range for dataset of size {len(self.df)}")
+            raise IndexError(
+                f"Index {index} out of range for dataset of size {len(self.df)}"
+            )
 
         row = self.df.iloc[index]
         image_path = self._resolve_path(str(row["filepath"]))

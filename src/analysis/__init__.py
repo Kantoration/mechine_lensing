@@ -12,19 +12,15 @@ from .aleatoric import (
     tta_indicators,
     selection_scores,
     topk_indices,
-    ensemble_disagreement
+    ensemble_disagreement,
 )
 
 __all__ = [
-    'AleatoricIndicators',
-    'compute_indicators', 
-    'compute_indicators_with_targets',
-    'tta_indicators',
-    'selection_scores',
-    'topk_indices',
-    'ensemble_disagreement'
+    "AleatoricIndicators",
+    "compute_indicators",
+    "compute_indicators_with_targets",
+    "tta_indicators",
+    "selection_scores",
+    "topk_indices",
+    "ensemble_disagreement",
 ]
-
-
-
-

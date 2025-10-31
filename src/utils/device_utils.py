@@ -7,7 +7,6 @@ consistent GPU/CPU handling across the entire codebase.
 
 from __future__ import annotations
 
-import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -25,7 +24,9 @@ class DeviceManager:
         self._device_cache: Dict[str, torch.device] = {}
         self._model_cache: Dict[str, torch.nn.Module] = {}
 
-    def get_device(self, device: Optional[Union[str, torch.device]] = None) -> torch.device:
+    def get_device(
+        self, device: Optional[Union[str, torch.device]] = None
+    ) -> torch.device:
         """
         Get a PyTorch device with caching and validation.
 
@@ -56,11 +57,15 @@ class DeviceManager:
         try:
             torch_device = torch.device(device_str)
             # Test if device is actually available
-            if torch_device.type == 'cuda' and not torch.cuda.is_available():
-                raise RuntimeError(f"CUDA is not available but requested device: {device_str}")
-            if torch_device.type == 'cuda' and torch_device.index is not None:
+            if torch_device.type == "cuda" and not torch.cuda.is_available():
+                raise RuntimeError(
+                    f"CUDA is not available but requested device: {device_str}"
+                )
+            if torch_device.type == "cuda" and torch_device.index is not None:
                 if torch_device.index >= torch.cuda.device_count():
-                    raise RuntimeError(f"CUDA device index {torch_device.index} out of range")
+                    raise RuntimeError(
+                        f"CUDA device index {torch_device.index} out of range"
+                    )
 
             self._device_cache[device_str] = torch_device
             logger.debug(f"Validated device: {torch_device}")
@@ -73,13 +78,15 @@ class DeviceManager:
     def _get_default_device(self) -> str:
         """Get the default device based on availability."""
         if torch.cuda.is_available():
-            return 'cuda'
-        return 'cpu'
+            return "cuda"
+        return "cpu"
 
-    def move_model_to_device(self,
-                           model: torch.nn.Module,
-                           device: Optional[Union[str, torch.device]] = None,
-                           model_name: Optional[str] = None) -> torch.nn.Module:
+    def move_model_to_device(
+        self,
+        model: torch.nn.Module,
+        device: Optional[Union[str, torch.device]] = None,
+        model_name: Optional[str] = None,
+    ) -> torch.nn.Module:
         """
         Move model to specified device with error handling and caching.
 
@@ -101,7 +108,9 @@ class DeviceManager:
 
         try:
             model = model.to(target_device)
-            logger.debug(f"Moved model '{model_name or 'unnamed'}' to device {target_device}")
+            logger.debug(
+                f"Moved model '{model_name or 'unnamed'}' to device {target_device}"
+            )
 
             if model_name:
                 self._model_cache[cache_key] = model
@@ -109,12 +118,16 @@ class DeviceManager:
             return model
 
         except Exception as e:
-            logger.error(f"Failed to move model '{model_name or 'unnamed'}' to device {target_device}: {e}")
+            logger.error(
+                f"Failed to move model '{model_name or 'unnamed'}' to device {target_device}: {e}"
+            )
             raise RuntimeError(f"Model device placement failed: {e}") from e
 
-    def move_batch_to_device(self,
-                           batch: Union[torch.Tensor, Dict, List],
-                           device: Optional[Union[str, torch.device]] = None) -> Union[torch.Tensor, Dict, List]:
+    def move_batch_to_device(
+        self,
+        batch: Union[torch.Tensor, Dict, List],
+        device: Optional[Union[str, torch.device]] = None,
+    ) -> Union[torch.Tensor, Dict, List]:
         """
         Move batch data to specified device with error handling.
 
@@ -131,13 +144,19 @@ class DeviceManager:
             if isinstance(batch, torch.Tensor):
                 return batch.to(target_device)
             elif isinstance(batch, dict):
-                return {k: v.to(target_device) if isinstance(v, torch.Tensor) else v
-                       for k, v in batch.items()}
+                return {
+                    k: v.to(target_device) if isinstance(v, torch.Tensor) else v
+                    for k, v in batch.items()
+                }
             elif isinstance(batch, (list, tuple)):
-                return type(batch)(item.to(target_device) if isinstance(item, torch.Tensor) else item
-                                 for item in batch)
+                return type(batch)(
+                    item.to(target_device) if isinstance(item, torch.Tensor) else item
+                    for item in batch
+                )
             else:
-                logger.warning(f"Unsupported batch type: {type(batch)}, returning as-is")
+                logger.warning(
+                    f"Unsupported batch type: {type(batch)}, returning as-is"
+                )
                 return batch
 
         except Exception as e:
@@ -147,15 +166,19 @@ class DeviceManager:
     def get_device_info(self) -> Dict[str, Any]:
         """Get information about available devices."""
         info = {
-            'cuda_available': torch.cuda.is_available(),
-            'device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
-            'current_device': torch.cuda.current_device() if torch.cuda.is_available() else None,
-            'device_names': []
+            "cuda_available": torch.cuda.is_available(),
+            "device_count": torch.cuda.device_count()
+            if torch.cuda.is_available()
+            else 0,
+            "current_device": torch.cuda.current_device()
+            if torch.cuda.is_available()
+            else None,
+            "device_names": [],
         }
 
         if torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
-                info['device_names'].append(torch.cuda.get_device_name(i))
+                info["device_names"].append(torch.cuda.get_device_name(i))
 
         return info
 
@@ -177,15 +200,19 @@ def get_device(device: Optional[Union[str, torch.device]] = None) -> torch.devic
     return _device_manager.get_device(device)
 
 
-def move_model_to_device(model: torch.nn.Module,
-                        device: Optional[Union[str, torch.device]] = None,
-                        model_name: Optional[str] = None) -> torch.nn.Module:
+def move_model_to_device(
+    model: torch.nn.Module,
+    device: Optional[Union[str, torch.device]] = None,
+    model_name: Optional[str] = None,
+) -> torch.nn.Module:
     """Convenience function to move model to device."""
     return _device_manager.move_model_to_device(model, device, model_name)
 
 
-def move_batch_to_device(batch: Union[torch.Tensor, Dict, List],
-                        device: Optional[Union[str, torch.device]] = None) -> Union[torch.Tensor, Dict, List]:
+def move_batch_to_device(
+    batch: Union[torch.Tensor, Dict, List],
+    device: Optional[Union[str, torch.device]] = None,
+) -> Union[torch.Tensor, Dict, List]:
     """Convenience function to move batch to device."""
     return _device_manager.move_batch_to_device(batch, device)
 
@@ -233,9 +260,9 @@ def batch_numpy_conversion(tensors: List[torch.Tensor]) -> List[np.ndarray]:
     return [tensor.numpy() for tensor in cpu_tensors]
 
 
-def memory_efficient_visualization(images: torch.Tensor,
-                                  attention_maps: torch.Tensor,
-                                  max_samples: int = 8) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+def memory_efficient_visualization(
+    images: torch.Tensor, attention_maps: torch.Tensor, max_samples: int = 8
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Memory-efficient visualization with batched CPU transfers.
 
@@ -259,9 +286,9 @@ def memory_efficient_visualization(images: torch.Tensor,
     return image_arrays, attn_arrays
 
 
-def visualize_attention_batch(images: torch.Tensor,
-                            attention_maps: torch.Tensor,
-                            max_samples: int = 8) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+def visualize_attention_batch(
+    images: torch.Tensor, attention_maps: torch.Tensor, max_samples: int = 8
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Visualize a batch of images and attention maps with memory efficiency.
 
@@ -283,8 +310,10 @@ def setup_device(device: Optional[str] = None) -> torch.device:
     return get_device(device)
 
 
-def move_to_device(obj: Union[torch.Tensor, torch.nn.Module],
-                  device: Optional[Union[str, torch.device]] = None) -> Union[torch.Tensor, torch.nn.Module]:
+def move_to_device(
+    obj: Union[torch.Tensor, torch.nn.Module],
+    device: Optional[Union[str, torch.device]] = None,
+) -> Union[torch.Tensor, torch.nn.Module]:
     """Legacy function for backward compatibility."""
     if isinstance(obj, torch.nn.Module):
         return move_model_to_device(obj, device)

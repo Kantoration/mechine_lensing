@@ -7,10 +7,9 @@ from .evaluator import LensEvaluator
 from .ensemble_evaluator import EnsembleEvaluator
 
 __all__ = [
-    'calculate_metrics',
-    'plot_confusion_matrix', 
-    'plot_roc_curve',
-    'LensEvaluator',
-    'EnsembleEvaluator'
+    "calculate_metrics",
+    "plot_confusion_matrix",
+    "plot_roc_curve",
+    "LensEvaluator",
+    "EnsembleEvaluator",
 ]
-

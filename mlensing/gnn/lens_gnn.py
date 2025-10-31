@@ -32,7 +32,9 @@ class PhysicsGuidedMessageLayer(nn.Module):
     edge_attr columns: [dx, dy, dist, grad_align, photo_contrast]
     """
 
-    def __init__(self, hidden_dim: int, edge_dim: int, heads: int = 4, p_drop: float = 0.1) -> None:
+    def __init__(
+        self, hidden_dim: int, edge_dim: int, heads: int = 4, p_drop: float = 0.1
+    ) -> None:
         super().__init__()
         self.hidden_dim = hidden_dim
         self.heads = heads
@@ -58,7 +60,7 @@ class PhysicsGuidedMessageLayer(nn.Module):
         k = self.lin_k(x_j).view(-1, self.heads, self.head_dim)
         v = self.lin_v(x_j).view(-1, self.heads, self.head_dim)
         tau = self._tau.clamp(0.5, 5.0)
-        attn = (q * k).sum(-1) / (self.head_dim ** 0.5 * tau)
+        attn = (q * k).sum(-1) / (self.head_dim**0.5 * tau)
         # Physics biases
         dist = edge_attr[:, 2].unsqueeze(-1)
         galign = edge_attr[:, 3].unsqueeze(-1)
@@ -72,13 +74,23 @@ class PhysicsGuidedMessageLayer(nn.Module):
 
 
 class HeteroscedasticHead(nn.Module):
-    def __init__(self, hidden_dim: int, out_ch: int, logvar_min: float = -7.0, logvar_max: float = 7.0) -> None:
+    def __init__(
+        self,
+        hidden_dim: int,
+        out_ch: int,
+        logvar_min: float = -7.0,
+        logvar_max: float = 7.0,
+    ) -> None:
         super().__init__()
         self.mu = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2), nn.ReLU(inplace=True), nn.Linear(hidden_dim // 2, out_ch)
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim // 2, out_ch),
         )
         self.lv = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2), nn.ReLU(inplace=True), nn.Linear(hidden_dim // 2, out_ch)
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim // 2, out_ch),
         )
         self.logvar_min = logvar_min
         self.logvar_max = logvar_max
@@ -95,16 +107,38 @@ class LensGNN(nn.Module):
     Expects a batch dict from graph_builder with keys: x, edge_index, edge_attr, meta.
     """
 
-    def __init__(self, node_dim: int, hidden_dim: int = 128, mp_layers: int = 4, heads: int = 4, uncertainty: str = "heteroscedastic") -> None:
+    def __init__(
+        self,
+        node_dim: int,
+        hidden_dim: int = 128,
+        mp_layers: int = 4,
+        heads: int = 4,
+        uncertainty: str = "heteroscedastic",
+    ) -> None:
         super().__init__()
         self.encoder = NodeEncoder(node_dim, hidden_dim)
-        self.layers = nn.ModuleList([PhysicsGuidedMessageLayer(hidden_dim, edge_dim=5, heads=heads) for _ in range(mp_layers)])
-        self.head_kappa = HeteroscedasticHead(hidden_dim, 1) if uncertainty == "heteroscedastic" else nn.Linear(hidden_dim, 1)
+        self.layers = nn.ModuleList(
+            [
+                PhysicsGuidedMessageLayer(hidden_dim, edge_dim=5, heads=heads)
+                for _ in range(mp_layers)
+            ]
+        )
+        self.head_kappa = (
+            HeteroscedasticHead(hidden_dim, 1)
+            if uncertainty == "heteroscedastic"
+            else nn.Linear(hidden_dim, 1)
+        )
         self.use_het = uncertainty == "heteroscedastic"
         self.head_psi = nn.Linear(hidden_dim, 1)
-        self.head_alpha = HeteroscedasticHead(hidden_dim, 2) if self.use_het else nn.Linear(hidden_dim, 2)
+        self.head_alpha = (
+            HeteroscedasticHead(hidden_dim, 2)
+            if self.use_het
+            else nn.Linear(hidden_dim, 2)
+        )
 
-    def _reshape_to_maps(self, node_out: Tensor, b: int, gh: int, gw: int, ch: int) -> Tensor:
+    def _reshape_to_maps(
+        self, node_out: Tensor, b: int, gh: int, gw: int, ch: int
+    ) -> Tensor:
         return node_out.view(b, gh, gw, ch).permute(0, 3, 1, 2).contiguous()
 
     def forward(self, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
@@ -120,7 +154,9 @@ class LensGNN(nn.Module):
         if self.use_het:
             k_mu, k_lv = self.head_kappa(x)
             out["kappa"] = self._reshape_to_maps(k_mu, b, gh, gw, 1)
-            out["kappa_var"] = self._reshape_to_maps(torch.exp(k_lv) + 1e-4, b, gh, gw, 1)
+            out["kappa_var"] = self._reshape_to_maps(
+                torch.exp(k_lv) + 1e-4, b, gh, gw, 1
+            )
         else:
             kappa = self.head_kappa(x)
             out["kappa"] = self._reshape_to_maps(kappa, b, gh, gw, 1)
@@ -129,27 +165,34 @@ class LensGNN(nn.Module):
         psi = self.head_psi(x)
         out["psi"] = self._reshape_to_maps(psi, b, gh, gw, 1)
 
-        # α from ψ
+        # α from ψ - require explicit dx/dy from physics scale
         ps = batch["meta"].get("physics_scale")
-        if ps is not None:
-            # Use explicit dx/dy from physics scale (preferred)
-            dx = ps.pixel_scale_rad  # Assume isotropic from PhysicsScale
-            dy = ps.pixel_scale_rad
-            gx, gy = gradient2d(out["psi"], dx=dx, dy=dy)
+        if ps is None:
+            raise ValueError(
+                "LensGNN requires physics_scale in batch meta (cannot derive dx/dy)"
+            )
+        # Extract dx/dy from physics scale (support both isotropic and anisotropic)
+        if hasattr(ps, "dx") and hasattr(ps, "dy"):
+            dx = ps.dx
+            dy = ps.dy
         else:
-            # Fallback: use pixel_scale_rad for backward compatibility
-            gx, gy = gradient2d(out["psi"], pixel_scale_rad=1.0)
+            # Fallback: assume isotropic if only pixel_scale_rad available
+            dx = ps.pixel_scale_rad
+            dy = ps.pixel_scale_rad
+        if dx is None or dy is None:
+            raise ValueError("LensGNN requires explicit dx and dy in physics_scale")
+        gx, gy = gradient2d(out["psi"], dx=dx, dy=dy)
         out["alpha_from_psi"] = torch.cat([gx, gy], dim=1)
 
         # Direct α
         if self.use_het:
             a_mu, a_lv = self.head_alpha(x)
             out["alpha_direct"] = self._reshape_to_maps(a_mu, b, gh, gw, 2)
-            out["alpha_var"] = self._reshape_to_maps(torch.exp(a_lv) + 1e-4, b, gh, gw, 2)
+            out["alpha_var"] = self._reshape_to_maps(
+                torch.exp(a_lv) + 1e-4, b, gh, gw, 2
+            )
         else:
             alpha = self.head_alpha(x)
             out["alpha_direct"] = self._reshape_to_maps(alpha, b, gh, gw, 2)
 
         return out
-
-

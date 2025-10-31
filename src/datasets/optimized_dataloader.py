@@ -127,7 +127,9 @@ def create_dataloaders(
         val_split,
     )
 
-    train_dataset, val_dataset = _build_train_val_datasets(data_root, img_size, val_split)
+    train_dataset, val_dataset = _build_train_val_datasets(
+        data_root, img_size, val_split
+    )
 
     train_loader = DataLoader(
         train_dataset,

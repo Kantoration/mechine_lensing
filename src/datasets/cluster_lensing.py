@@ -36,6 +36,7 @@ class ClusterLensingDataset(Dataset):
         csv_path: str | Path,
         tiling: Optional[TilingConfig] = None,
         normalize: bool = True,
+        require_sigma_crit: bool = False,
     ) -> None:
         self.csv_path = Path(csv_path)
         if not self.csv_path.exists():
@@ -43,6 +44,7 @@ class ClusterLensingDataset(Dataset):
         self.df = pd.read_csv(self.csv_path)
         self.tiling = tiling
         self.normalize = normalize
+        self.require_sigma_crit = require_sigma_crit
 
         required = {"filepath", "pixel_scale_arcsec"}
         missing = required.difference(self.df.columns)
@@ -73,7 +75,9 @@ class ClusterLensingDataset(Dataset):
         yy = yy * arcsec
         return torch.stack([xx, yy], dim=0)  # [2, H, W]
 
-    def _tile_image(self, img: torch.Tensor, tile: int, overlap: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _tile_image(
+        self, img: torch.Tensor, tile: int, overlap: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         _, H, W = img.shape
         stride = tile - overlap
         xs = list(range(0, max(1, W - tile + 1), stride))
@@ -82,7 +86,7 @@ class ClusterLensingDataset(Dataset):
         coords = []
         for y in ys:
             for x in xs:
-                patch = img[:, y:y+tile, x:x+tile]
+                patch = img[:, y : y + tile, x : x + tile]
                 # pad if on border
                 pad_h = max(0, tile - patch.shape[-2])
                 pad_w = max(0, tile - patch.shape[-1])
@@ -94,13 +98,39 @@ class ClusterLensingDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         row = self.df.iloc[idx]
-        fits_path = Path(row["filepath"]) if Path(row["filepath"]).is_absolute() else (self.csv_path.parent / row["filepath"]).resolve()
+        fits_path = (
+            Path(row["filepath"])
+            if Path(row["filepath"]).is_absolute()
+            else (self.csv_path.parent / row["filepath"]).resolve()
+        )
         img_np = self._load_fits(fits_path)
         img = torch.from_numpy(img_np).unsqueeze(0)  # [1, H, W]
 
-        arcsec = float(row.get("pixel_scale_arcsec", 0.2))
+        # Require explicit pixel_scale_arcsec (no silent defaults)
+        arcsec = row.get("pixel_scale_arcsec", None)
+        if arcsec is None or pd.isna(arcsec):
+            raise ValueError(
+                f"Cluster sample {idx} missing 'pixel_scale_arcsec' (cannot derive dx/dy). "
+                f"Provide in CSV column."
+            )
+        arcsec = float(arcsec)
+
+        # Get y-scale (defaults to x-scale if not specified, but should be explicit)
+        pixel_scale_y_arcsec = row.get("pixel_scale_y_arcsec", None)
+        if pixel_scale_y_arcsec is None or pd.isna(pixel_scale_y_arcsec):
+            pixel_scale_y_arcsec = arcsec
+        else:
+            pixel_scale_y_arcsec = float(pixel_scale_y_arcsec)
+
         dx = arcsec * (np.pi / 180.0 / 3600.0)
-        dy = dx
+        dy = pixel_scale_y_arcsec * (np.pi / 180.0 / 3600.0)
+
+        # Extract sigma_crit - require explicit for physics pipelines
+        sigma_crit = row.get("sigma_crit", None)
+        if sigma_crit is None or pd.isna(sigma_crit):
+            sigma_crit = None
+        else:
+            sigma_crit = float(sigma_crit)
 
         sample: Dict[str, Any] = {
             "image": img,
@@ -108,12 +138,21 @@ class ClusterLensingDataset(Dataset):
             "psf": None,
             "meta": {
                 "pixel_scale_arcsec": arcsec,
+                "pixel_scale_y_arcsec": pixel_scale_y_arcsec,
                 "dx": dx,
                 "dy": dy,
                 "coords_grid": self._coords_grid(img.shape[-2], img.shape[-1], arcsec),
                 "cluster_id": row.get("cluster_id", None),
+                "sigma_crit": sigma_crit,
             },
         }
+
+        # Physics pipelines must declare sigma_crit explicitly when require_sigma_crit=True
+        if self.require_sigma_crit and sample["meta"]["sigma_crit"] is None:
+            raise ValueError(
+                f"Cluster sample {idx} missing 'sigma_crit' with require_sigma_crit=True. "
+                f"Provide in CSV column for physics pipelines."
+            )
 
         if self.tiling is not None:
             tiles, coords = self._tile_image(img, self.tiling.tile, self.tiling.overlap)
@@ -122,13 +161,21 @@ class ClusterLensingDataset(Dataset):
 
         # Optional mask or PSF
         if "mask_path" in row and pd.notna(row["mask_path"]):
-            mpath = Path(row["mask_path"]) if Path(row["mask_path"]).is_absolute() else (self.csv_path.parent / row["mask_path"]).resolve()
+            mpath = (
+                Path(row["mask_path"])
+                if Path(row["mask_path"]).is_absolute()
+                else (self.csv_path.parent / row["mask_path"]).resolve()
+            )
             if mpath.exists():
                 with fits.open(mpath) as mh:
                     m = np.asarray(mh[0].data, dtype=np.float32)
                 sample["mask"] = torch.from_numpy(m > 0)
         if "psf_path" in row and pd.notna(row["psf_path"]):
-            ppath = Path(row["psf_path"]) if Path(row["psf_path"]).is_absolute() else (self.csv_path.parent / row["psf_path"]).resolve()
+            ppath = (
+                Path(row["psf_path"])
+                if Path(row["psf_path"]).is_absolute()
+                else (self.csv_path.parent / row["psf_path"]).resolve()
+            )
             if ppath.exists():
                 with fits.open(ppath) as ph:
                     p = np.asarray(ph[0].data, dtype=np.float32)

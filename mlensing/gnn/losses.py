@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from .physics_ops import (
     LensingScale,
     BoundaryCondition,
-    poisson_residual_scale,
     total_variation_edge_aware,
     masked_laplacian,
 )
@@ -24,7 +23,7 @@ def beta_nll(mu: Tensor, logvar: Tensor, target: Tensor, beta: float = 0.5) -> T
     """
     var = torch.exp(logvar).clamp_min(1e-4)
     nll = 0.5 * logvar + 0.5 * (mu - target) ** 2 / var
-    weight = (var.detach() ** (-beta))
+    weight = var.detach() ** (-beta)
     return (nll * weight).mean()
 
 
@@ -34,7 +33,7 @@ def spearman_rho_var_error(pred: Tensor, target: Tensor, var: Tensor) -> float:
         err2 = ((pred - target) ** 2).flatten().float().cpu()
         varf = var.flatten().float().cpu()
         if err2.numel() < 3:
-            return float('nan')
+            return float("nan")
         # simple rank correlation implementation without scipy
         erank = torch.argsort(torch.argsort(err2))
         vrank = torch.argsort(torch.argsort(varf))
@@ -90,17 +89,13 @@ class CompositeLensLoss(nn.Module):
         #   A&A. Boundary-enhanced artifacts unless masked; use border-margin mask.
         # - Massey, R. et al. (2007). "Cosmic shear as a precision cosmology tool." New J Phys.
         #   Operators must respect area scaling and handle anisotropic dx/dy for real cluster data.
-        
+
         # Compute Laplacian with border mask to exclude edge bias
         # Use explicit dx/dy for proper anisotropic handling (required for rectangular pixels/WCS grids)
         lap, border_mask = masked_laplacian(
-            pred["psi"], 
-            dx=scale.dx,
-            dy=scale.dy,
-            bc=self.bc, 
-            border_margin=1
+            pred["psi"], dx=scale.dx, dy=scale.dy, bc=self.bc, border_margin=1
         )
-        
+
         # Apply κ gauge fix: subtract mean to remove arbitrary offset
         # Gauge-fixing ensures κ-ψ Poisson relation is well-posed and removes arbitrary
         # constant offset that doesn't affect physics. See Furtak & Zitrin (2024).
@@ -108,21 +103,25 @@ class CompositeLensLoss(nn.Module):
             kappa_gauge = pred["kappa"] - pred["kappa"].mean(dim=(-2, -1), keepdim=True)
         else:
             kappa_gauge = pred["kappa"]
-        
+
         # Poisson residual: ∇²ψ - 2κ
         res = lap - scale.factor * kappa_gauge
-        
+
         # Apply border mask to exclude edge pixels from loss
         # Reduces boundary-enhanced artifacts that can bias physics loss. See Schneider & Seitz (1995).
         losses["poisson"] = (res.abs() * border_mask).sum() / (border_mask.sum() + 1e-8)
 
         # Alpha consistency (if direct present)
         if "alpha_direct" in pred and "alpha_from_psi" in pred:
-            losses["alpha_cons"] = (pred["alpha_direct"] - pred["alpha_from_psi"]).abs().mean()
+            losses["alpha_cons"] = (
+                (pred["alpha_direct"] - pred["alpha_from_psi"]).abs().mean()
+            )
 
-        # Edge-aware TV on κ
+        # Edge-aware TV on κ - use explicit dx/dy
         if image is not None:
-            losses["tv"] = total_variation_edge_aware(pred["kappa"], image, pixel_scale_rad=scale.dx)
+            losses["tv"] = total_variation_edge_aware(
+                pred["kappa"], image, dx=scale.dx, dy=scale.dy
+            )
         else:
             losses["tv"] = torch.zeros((), device=res.device)
 
@@ -139,7 +138,9 @@ class CompositeLensLoss(nn.Module):
                     mu = pred["kappa"]
                     var = pred["kappa_var"].clamp_min(1e-4)
                     logvar = torch.log(var)
-                    losses["nll_kappa"] = beta_nll(mu, logvar, target["kappa"], beta=self.beta)
+                    losses["nll_kappa"] = beta_nll(
+                        mu, logvar, target["kappa"], beta=self.beta
+                    )
                 else:
                     losses["mse_kappa"] = F.mse_loss(pred["kappa"], target["kappa"])
             if "alpha" in target and "alpha_direct" in pred:
@@ -147,9 +148,13 @@ class CompositeLensLoss(nn.Module):
                     mu = pred["alpha_direct"]
                     var = pred["alpha_var"].clamp_min(1e-4)
                     logvar = torch.log(var)
-                    losses["nll_alpha"] = beta_nll(mu, logvar, target["alpha"], beta=self.beta)
+                    losses["nll_alpha"] = beta_nll(
+                        mu, logvar, target["alpha"], beta=self.beta
+                    )
                 else:
-                    losses["mse_alpha"] = F.mse_loss(pred["alpha_direct"], target["alpha"]) 
+                    losses["mse_alpha"] = F.mse_loss(
+                        pred["alpha_direct"], target["alpha"]
+                    )
 
         # SSL consistency (κ-only to start)
         if ssl_pred_weak is not None:
@@ -172,15 +177,22 @@ class CompositeLensLoss(nn.Module):
                 conf = (1.0 / (t_var + 1e-6)).sigmoid()
                 mask = (conf > ssl_threshold).to(pred["kappa"].dtype)
                 pseudo = t_mu.detach()
-                ploss = ((pred["kappa"] - pseudo) ** 2 * mask).sum() / (mask.sum() + 1e-8)
+                ploss = ((pred["kappa"] - pseudo) ** 2 * mask).sum() / (
+                    mask.sum() + 1e-8
+                )
                 losses["ssl_pseudo_kappa"] = ploss
 
         # Weighted sum
         total = (
             self.w_poisson * losses["poisson"]
-            + self.w_alpha * losses.get("alpha_cons", torch.zeros_like(losses["poisson"]))
+            + self.w_alpha
+            * losses.get("alpha_cons", torch.zeros_like(losses["poisson"]))
             + self.w_tv * losses["tv"]
-            + self.w_nll * (losses.get("nll_kappa", torch.zeros_like(losses["poisson"])) + losses.get("nll_alpha", torch.zeros_like(losses["poisson"])) )
+            + self.w_nll
+            * (
+                losses.get("nll_kappa", torch.zeros_like(losses["poisson"]))
+                + losses.get("nll_alpha", torch.zeros_like(losses["poisson"]))
+            )
             + losses.get("mse_kappa", torch.zeros_like(losses["poisson"]))
             + losses.get("mse_alpha", torch.zeros_like(losses["poisson"]))
             + losses.get("ssl_cons", torch.zeros_like(losses["poisson"]))
@@ -193,15 +205,17 @@ class CompositeLensLoss(nn.Module):
             "loss_poisson": float(losses["poisson"].item()),
             "loss_tv": float(losses["tv"].item()),
         }
-        if "kappa" in (target or {} ) and "kappa_var" in pred:
-            diag["rho_var_err_kappa"] = spearman_rho_var_error(pred["kappa"], target["kappa"], pred["kappa_var"])
-        if "alpha" in (target or {} ) and "alpha_var" in pred and "alpha_direct" in pred:
-            diag["rho_var_err_alpha"] = spearman_rho_var_error(pred["alpha_direct"], target["alpha"], pred["alpha_var"])
+        if "kappa" in (target or {}) and "kappa_var" in pred:
+            diag["rho_var_err_kappa"] = spearman_rho_var_error(
+                pred["kappa"], target["kappa"], pred["kappa_var"]
+            )
+        if "alpha" in (target or {}) and "alpha_var" in pred and "alpha_direct" in pred:
+            diag["rho_var_err_alpha"] = spearman_rho_var_error(
+                pred["alpha_direct"], target["alpha"], pred["alpha_var"]
+            )
         diag["loss_total"] = float(total.item())
         if final_phase and diag.get("rho_var_err_kappa", 1.0) is not None:
             rho = diag.get("rho_var_err_kappa", 1.0)
             diag["calibration_alert"] = 1.0 if (rho is not None and rho < 0.3) else 0.0
 
         return total, diag
-
-
