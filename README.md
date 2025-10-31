@@ -41,12 +41,17 @@ python scripts/run_cluster_inference.py --config examples/cluster_tiled_inferenc
 ```
 
 Notes:
-- Always set `bands`, and either `pixel_scale_arcsec` or explicit `dx/dy`.
-- Choose `sigma_crit_policy: dimensionless|physical` per your units.
-- κ downsampling uses area-preserving pooling; α is re-derived from ψ.
+- **REQUIRED**: Set `bands`, and `pixel_scale_arcsec` (or explicit `dx/dy`) in dataset metadata
+- **REQUIRED for physics**: Provide `sigma_crit` in dataset when using physics losses
+- Choose `sigma_crit_policy: dimensionless|physical` per your units
+- κ downsampling uses area-preserving pooling; α is re-derived from ψ
+
+**P1 Hardening**: Datasets now enforce explicit metadata - missing `pixel_scale_arcsec` or `sigma_crit` (when required) will raise `ValueError`.
 
 ## Band Order & Normalization
-Use per-survey normalization (not ImageNet). Example:
+
+**P1 Hardening**: ImageNet normalization has been **removed**. Use per-survey normalization:
+
 ```yaml
 bands: [g, r, i]
 normalization:
@@ -54,13 +59,25 @@ normalization:
   r: {mean: 0.020, std: 0.013}
   i: {mean: 0.022, std: 0.014}
 ```
+
+**Default**: Zero-mean, unit-variance per band (preserves flux calibration) when survey stats not provided.
+
+**Color jitter**: Opt-in only (default OFF for physics integrity).
+
 See `src/datasets/transforms.py`.
 
 ## Physics Operators & Policies
+
+**P1 Hardening**: All physics operators require explicit spacing:
+- **Required**: `dx`, `dy` in radians OR `pixel_scale_rad` for isotropic (backward compat)
+- No silent defaults: Operators raise `TypeError` if spacing missing
+- Graph builder requires explicit `PhysicsScale` (no `PhysicsScale(pixel_scale_arcsec=0.1)` default)
+
+Policies:
 - Gauge: subtract mean κ in loss to remove arbitrary offset
-- Explicit spacing: `dx`, `dy` in radians for all operators
 - Borders: 1-pixel masked in Poisson loss to reduce padding bias
 - Resampling: κ/ψ via avg-pool; α recomputed from ψ after rescale
+
 Details: `docs/PHYSICS.md` and `mlensing/gnn/physics_ops.py`.
 
 ## Datasets & Loaders
